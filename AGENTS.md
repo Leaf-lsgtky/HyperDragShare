@@ -1,4 +1,4 @@
-# DragShare Agent Guide
+# HyperDragShare Agent Guide
 
 本文是后续自动化代理在本工程内工作的约束。当前源码和
 `docs/IMPLEMENTATION.md` 是实现事实来源；`E:\workspace\TaplusContentPreview`
@@ -6,10 +6,10 @@
 
 ## 工程基线
 
-- 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 28，targetSdk 34，compileSdk 37。
-- 当前版本：`1.7.0`，`versionCode 24`。
+- 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 33，targetSdk 34，compileSdk 37。
+- 当前版本：`1.7.12`，`versionCode 36`。
 - 已验证宿主：传送门 `4.2.1`，包名 `com.miui.contentextension`。
-- LSPosed API：82，入口为 `com.example.dragshare.MainHook`。
+- LSPosed API：82，入口为 `com.leaf.hyperdragshare.codex.MainHook`。
 - 可靠的同手势跟手依赖 root 读取 Linux evdev；MIUI 输入监听仅作回退。
 - 当前设备记录：`Xiaomi_Touch_Input_0`、`/dev/input/event7`、原始范围
   `121999 x 265599`、屏幕 `1220 x 2656`。代码必须继续动态探测，不能硬编码这些值。

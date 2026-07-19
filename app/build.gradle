@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace 'com.example.dragshare'
+    namespace 'com.leaf.hyperdragshare.codex'
     compileSdk 37
 
     defaultConfig {
-        applicationId 'com.example.dragshare'
-        minSdk 28
+        applicationId 'com.leaf.hyperdragshare.codex'
+        minSdk 33
         targetSdk 34
-        versionCode 32
-        versionName '1.7.8'
+        versionCode 36
+        versionName '1.7.12'
     }
 
     compileOptions {
@@ -68,6 +68,7 @@ dependencies {
     implementation 'top.yukonga.miuix.kmp:miuix-preference-android:0.9.3'
     implementation 'top.yukonga.miuix.kmp:miuix-icons-android:0.9.3'
     implementation 'top.yukonga.miuix.kmp:miuix-navigation3-ui-android:0.9.3'
+    implementation 'top.yukonga.miuix.kmp:miuix-blur-android:0.9.3'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.14.1'
 }

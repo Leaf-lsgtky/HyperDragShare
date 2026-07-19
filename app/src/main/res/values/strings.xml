@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">拖拽分享</string>
-    <string name="xposed_description">为传送门增加跟手预览、可配置分享菜单、文本分词和图片本地保存</string>
-    <string name="accessibility_service_label">拖拽分享</string>
-    <string name="accessibility_service_description">长按时读取当前界面的文字，并在识别为图片时截取对应区域用于拖拽分享。</string>
+    <string name="app_name">HyperDragShare</string>
+    <string name="xposed_description">HyperDragShare：为传送门增加跟手预览、可配置分享菜单、文本分词和图片本地保存</string>
+    <string name="accessibility_service_label">HyperDragShare</string>
+    <string name="accessibility_service_description">长按时读取当前界面的文字，并在识别为图片时截取对应区域用于 HyperDragShare 分享。</string>
     <string name="copy_tips">已复制所选文字</string>
     <string name="a_msg_no_words">没有可分词的文字</string>
     <string name="bigbang_overlay_title">文本分词</string>

@@ -26,7 +26,7 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
-        android:icon="@drawable/ic_share"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.DragShare">
@@ -58,7 +58,7 @@
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity="com.example.dragshare.overlay"
+            android:taskAffinity="com.leaf.hyperdragshare.codex.overlay"
             android:theme="@style/Theme.DragShare.BigBangOverlay" />
 
         <service
@@ -80,7 +80,7 @@
         -->
         <provider
             android:name=".ShareImageProvider"
-            android:authorities="com.example.dragshare.share"
+            android:authorities="com.leaf.hyperdragshare.codex.share"
             android:exported="true"
             android:grantUriPermissions="true"
             tools:ignore="ExportedContentProvider" />

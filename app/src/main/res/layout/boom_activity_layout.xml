@@ -7,7 +7,7 @@
     android:background="@drawable/boom_background_color"
     android:visibility="invisible">
 
-    <com.example.dragshare.CustomScrollView
+    <com.leaf.hyperdragshare.codex.CustomScrollView
         android:id="@+id/boom_scroller"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -33,7 +33,7 @@
                 android:orientation="vertical"
                 android:visibility="gone" />
 
-            <com.example.dragshare.SwipeSelectView
+            <com.leaf.hyperdragshare.codex.SwipeSelectView
                 android:id="@+id/boom_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -49,7 +49,7 @@
             <include android:id="@+id/multi_selected_bar"
                      layout="@layout/multi_select_bar"/>
         </FrameLayout>
-    </com.example.dragshare.CustomScrollView>
+    </com.leaf.hyperdragshare.codex.CustomScrollView>
 
     <TextView
         android:id="@+id/boom_adjacent_top_hint"

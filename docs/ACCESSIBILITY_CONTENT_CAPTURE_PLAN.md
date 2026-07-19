@@ -509,7 +509,7 @@ FooView 这段实现中存在以下风险，DragShare 必须修正：
 ### 10.1 进程边界
 
 ```text
-模块默认进程（com.example.dragshare）
+模块默认进程（com.leaf.hyperdragshare.codex）
   ├── MainActivity / Miuix 设置
   ├── ShareImageProvider
   └── DragShareAccessibilityService
@@ -715,7 +715,7 @@ public final int contentCaptureMode;
 定义一个只用于通知的 URI：
 
 ```text
-content://com.example.dragshare.share/settings
+content://com.leaf.hyperdragshare.codex.share/settings
 ```
 
 `saveLocal()` 成功更新 SharedPreferences 后调用：

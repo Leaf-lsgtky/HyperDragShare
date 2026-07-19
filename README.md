@@ -1,87 +1,43 @@
-# DragShare
+# HyperDragShare
 
-LSPosed module for the following HyperOS component:
+HyperDragShare 是一个 Android LSPosed 模块，为 HyperOS 传送门的文字和图片长按提供同一手势内的跟手预览与分享菜单。
 
-- Taplus / Portal `4.2.1` (`com.miui.contentextension`)
+## 功能
 
-Application Extension Service is deliberately not in the module scope. On
-some devices, force-stopping that package also terminates injected apps.
+- 使用 Root evdev 输入，在传送门识别长按后继续跟随当前手指。
+- 支持文字分享、图片分享、保存图片到本地和文本分词。
+- 提供简洁、流光和环形三种可配置的分享菜单，以及深浅色外观、目标排序和隐藏设置。
+- 可选无障碍内容获取模式；该模式仍需要 Root 输入，且不会扩大 LSPosed 作用域。
 
-## Behavior
+## 要求
 
-After Taplus recognizes a long-pressed text or image, the module replaces its
-float card with a compact preview above the active pointer. The simple and
-portal-glow styles open a single-row share target strip at the bottom; the
-circle-menu style can open a five-item semicircle from the left or right edge. Holding at a
-scroll hot spot advances the available targets; releasing over a highlighted
-target shares directly to that activity.
+- Android 13 或更高版本。
+- 已安装并启用 LSPosed；模块作用域仅选择 `com.miui.contentextension`。
+- Root 权限用于读取 Linux evdev，从而可靠地跟随同一次拖拽。
+- 已验证传送门版本：`4.2.1`。
 
-The module launcher provides Miuix settings for light/dark overlay colors, the
-drag overlay style (simple, portal glow, or side semicircle menu), independent
-text/image switches, the edge trigger distance, automatic scroll speed, and an
-optional foreground-touch lock. Simple style also supports top/bottom/left/right
-or tilt-selected placement, opacity, and corner radius. Closing the menu when
-the pointer leaves its active region is shared by all three styles. Tilt placement
-uses the lower side of the phone and locks that side when the menu first opens.
-The home page reports root availability and whether the current APK build has
-been injected into Taplus, using a green activated status card after both checks pass.
-Two dedicated settings pages group share
-targets by application for per-entry visibility and provide long-press drag
-reordering; hidden targets are omitted from the ordering page. Changes are read at the next drag session and do not require adding
-Application Extension Service to the LSPosed scope. The touch lock is
-best-effort: on ROMs that expose the hidden gesture
-monitor API to the portal UID it pilfers the current pointer stream, causing the
-original window to receive `ACTION_CANCEL`; otherwise the module logs the
-unsupported path and keeps the normal gesture behavior.
+## 安装
 
-The visibility page uses expandable application cards. Each application has a
-master switch, while each exported sharing activity remains independently
-controllable in the indented child list. The toolbar menu can select, clear,
-expand, or collapse every group. All settings pages render edge-to-edge while
-Miuix handles status bars, display cutouts, and navigation-bar insets.
+1. 从 [Releases](https://github.com/Leaf-lsgtky/HyperDragShare/releases) 下载 APK 并安装。
+2. 在 LSPosed 中启用 HyperDragShare，作用域只勾选传送门。
+3. 重新启动传送门作用域进程后，打开 HyperDragShare 完成设置。
 
-The portal-glow style follows the animation structure found in the JADX reference:
-the bottom light layer is visible as soon as a drag starts, brightens with downward
-travel, expands the tray at the bottom, and brings share targets in with staggered
-spring motion. The optional full-screen tilt from the reference is intentionally
-omitted because the module does not own the host app's Surface.
+不要将 `com.miui.contentcatcher` 加入 LSPosed 作用域，也不要强行停止它。
 
-The circle-menu style follows the currently inspected Oplus ROM `circlemenuview`
-classes and the observed app behavior: a 36-degree item arc opens only from the
-left or right edge. Its edge and vertical anchor are captured when it expands;
-later pointer movement selects targets without moving the menu.
+## 构建
 
-Text is passed as `ACTION_SEND` / `text/plain`. Images are compressed below the
-Binder transaction limit, staged in this module's cache, and shared through an
-unguessable, short-lived content URI. The selected package receives an explicit
-read grant; URI holders can also survive share relays that drop grant metadata.
-Image menus put a built-in `保存到本地` action first. It writes to the system
-Pictures collection with a second-precision name such as
-`20260718_173012.jpg`; its accent-colored rounded tile contains the white Miuix
-Download glyph, while app targets follow the saved order and visibility rules.
-
-The implementation and compatibility decisions are documented in
-[`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
-
-## Build
+项目使用 Java/Kotlin 17。Windows 下执行：
 
 ```powershell
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug
 ```
 
-The installable debug APK is written to:
+生成的 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+## 发布
 
-## Enable
+向 GitHub 推送形如 `v1.7.12` 的 tag 后，GitHub Actions 会执行测试、Lint 和 Debug APK 构建，并自动创建对应的 GitHub Release 与 APK 附件。
 
-Install the APK, enable the module in LSPosed, select the Taplus scope, and
-restart Taplus (a device reboot is the simplest option).
+## 说明
 
-Useful log tags start with `DragShare/`. `RootTouchSource` is authoritative once
-it has opened the direct touchscreen node: it scales the advertised ABS range,
-maps display rotation, and follows the already-active physical gesture without
-making the overlay touchable. `MiuiInputManager` remains a fallback only when
-the root source is unavailable.
+实现边界、输入源仲裁和兼容性约束记录在 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。
