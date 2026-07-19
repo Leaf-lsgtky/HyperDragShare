@@ -96,6 +96,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBarState
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
@@ -413,6 +414,14 @@ private fun MainPage(
                         },
                     )
                     SwitchPreference(
+                        title = "启用文字复制",
+                        summary = "在文字分享菜单中显示复制",
+                        checked = settings.textCopyEnabled,
+                        onCheckedChange = { checked ->
+                            persist(copySettings(settings, textCopyEnabled = checked))
+                        },
+                    )
+                    SwitchPreference(
                         title = "预加载分词库",
                         summary = "启动时在后台加载词典，缩短首次打开文本分词的等待",
                         checked = settings.preloadTextSegmenter,
@@ -426,6 +435,14 @@ private fun MainPage(
                         checked = settings.imageSharingEnabled,
                         onCheckedChange = { checked ->
                             persist(copySettings(settings, imageSharingEnabled = checked))
+                        },
+                    )
+                    SwitchPreference(
+                        title = "启用图片复制",
+                        summary = "在图片分享菜单中显示复制",
+                        checked = settings.imageCopyEnabled,
+                        onCheckedChange = { checked ->
+                            persist(copySettings(settings, imageCopyEnabled = checked))
                         },
                     )
                 }
@@ -1620,6 +1637,7 @@ private fun querySettingsTargets(context: Context): List<ShareTarget> {
         emptyList()
     }
     return targets + listOf(
+        ShareTarget.copyToClipboard(ShareTargetRepository.loadCopyIcon(context)),
         ShareTarget.saveToLocal(ShareTargetRepository.loadSaveIcon(context)),
         ShareTarget.textSegmentation(ShareTargetRepository.loadTextSegmentationIcon(context)),
     )
@@ -1685,6 +1703,7 @@ private fun loadSettingsIcons(
 
 private fun targetSummary(target: ShareTarget): String {
     return when {
+        target.isCopyToClipboard() -> "可分别开关文字和图片菜单"
         target.isSaveToLocal() -> "仅在图片分享菜单中显示"
         target.isTextSegmentation() -> "仅在文字分享菜单中显示"
         else -> {
@@ -1703,7 +1722,8 @@ private fun TargetIcon(
     size: Dp = 40.dp,
     normalizedBitmap: Bitmap? = null,
 ) {
-    if (target.isSaveToLocal()) {
+    if (target.isSaveToLocal() || target.isCopyToClipboard()) {
+        val icon = if (target.isCopyToClipboard()) MiuixIcons.Copy else MiuixIcons.Download
         Box(
             modifier = modifier.size(size),
             contentAlignment = Alignment.Center,
@@ -1718,7 +1738,7 @@ private fun TargetIcon(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Download,
+                    imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(size * 0.5f),
                     tint = Color.White,
@@ -1795,6 +1815,8 @@ private fun copySettings(
     contentCaptureMode: Int = current.contentCaptureMode,
     textSharingEnabled: Boolean = current.textSharingEnabled,
     imageSharingEnabled: Boolean = current.imageSharingEnabled,
+    textCopyEnabled: Boolean = current.textCopyEnabled,
+    imageCopyEnabled: Boolean = current.imageCopyEnabled,
     preloadTextSegmenter: Boolean = current.preloadTextSegmenter,
     simpleMenuPosition: Int = current.simpleMenuPosition,
     simpleMenuOpacityPercent: Int = current.simpleMenuOpacityPercent,
@@ -1832,6 +1854,8 @@ private fun copySettings(
     accessibilityLongPressTimeoutMillis,
     accessibilityRecognitionSensitivityPercent,
     preloadTextSegmenter,
+    textCopyEnabled,
+    imageCopyEnabled,
 )
 
 @Suppress("DEPRECATION")

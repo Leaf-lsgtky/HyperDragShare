@@ -645,10 +645,16 @@ final class CircleMenuOverlayView extends FrameLayout {
 
     private Drawable iconFor(ShareTarget target) {
         Drawable icon = target == null ? null : target.icon;
-        if (target == null || !target.isSaveToLocal()) {
+        if (target == null) {
             return icon;
         }
-        return new SaveTargetIconDrawable(icon, accentColor);
+        if (target.isSaveToLocal()) {
+            return new SaveTargetIconDrawable(icon, accentColor);
+        }
+        if (target.isCopyToClipboard()) {
+            return new CopyTargetIconDrawable(icon, accentColor);
+        }
+        return icon;
     }
 
     private View itemContent(View item) {

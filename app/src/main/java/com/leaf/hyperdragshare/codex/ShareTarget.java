@@ -46,6 +46,16 @@ final class ShareTarget {
                 true);
     }
 
+    static ShareTarget copyToClipboard(Drawable icon) {
+        return new ShareTarget(
+                null,
+                "复制",
+                icon,
+                DragShareSettings.TARGET_COPY,
+                "builtin",
+                true);
+    }
+
     static ShareTarget textSegmentation(Drawable icon) {
         return new ShareTarget(
                 null,
@@ -70,6 +80,10 @@ final class ShareTarget {
 
     boolean isSaveToLocal() {
         return builtIn && DragShareSettings.TARGET_SAVE_LOCAL.equals(key);
+    }
+
+    boolean isCopyToClipboard() {
+        return builtIn && DragShareSettings.TARGET_COPY.equals(key);
     }
 
     boolean isTextSegmentation() {

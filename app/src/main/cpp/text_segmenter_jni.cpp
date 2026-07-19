@@ -130,7 +130,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR;
     }
-    jclass clazz = env->FindClass("com/example/dragshare/TextSegmenter");
+    jclass clazz = env->FindClass("com/leaf/hyperdragshare/codex/TextSegmenter");
     if (clazz == nullptr || env->RegisterNatives(
             clazz,
             kMethods,

@@ -1,5 +1,7 @@
 package com.leaf.hyperdragshare.codex;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -1279,6 +1281,11 @@ final class DragShareController {
             shareSession.cancelled = true;
             return;
         }
+        if (target.isCopyToClipboard()) {
+            copyToClipboard(shareSession.payload, shareSession.stagedUri);
+            shareSession.cancelled = true;
+            return;
+        }
         if (target.isTextSegmentation()) {
             openTextSegmentation(shareSession.payload.text);
             shareSession.cancelled = true;
@@ -1296,6 +1303,38 @@ final class DragShareController {
             log("share launch failed", error);
         }
         shareSession.cancelled = true;
+    }
+
+    private void copyToClipboard(CapturedContent payload, Uri stagedImage) {
+        boolean image = payload != null && payload.isImage();
+        try {
+            ClipboardManager clipboard = context.getSystemService(ClipboardManager.class);
+            if (clipboard == null) {
+                throw new IllegalStateException("Clipboard service is unavailable");
+            }
+            ClipData clip;
+            if (image) {
+                if (stagedImage == null) {
+                    throw new IllegalArgumentException("Image URI is not ready");
+                }
+                clip = ClipData.newUri(
+                        context.getContentResolver(),
+                        "drag-share-image",
+                        stagedImage);
+            } else {
+                String text = payload == null ? null : payload.text;
+                if (text == null || text.trim().isEmpty()) {
+                    throw new IllegalArgumentException("Text is empty");
+                }
+                clip = ClipData.newPlainText("drag-share-text", text);
+            }
+            clipboard.setPrimaryClip(clip);
+            log("copied " + (image ? "image" : "text") + " to clipboard");
+            showToast(image ? "图片已复制到剪贴板" : "文字已复制到剪贴板");
+        } catch (Throwable error) {
+            log("clipboard copy failed", error);
+            showToast(image ? "复制图片失败" : "复制文字失败");
+        }
     }
 
     private void openTextSegmentation(String text) {
@@ -1611,6 +1650,9 @@ final class DragShareController {
         }
         if (target.isSaveToLocal()) {
             return new SaveTargetIconDrawable(icon, palette.accent);
+        }
+        if (target.isCopyToClipboard()) {
+            return new CopyTargetIconDrawable(icon, palette.accent);
         }
         if (target.isTextSegmentation()) {
             return new TextSegmentationTargetIconDrawable(icon, palette.accent);

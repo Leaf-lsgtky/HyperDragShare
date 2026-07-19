@@ -84,7 +84,7 @@ final class ShareTargetRepository {
 
     /**
      * Applies visibility and the user-defined order to a runtime menu. Built-in actions are
-     * deliberately inserted before package targets and are limited to their matching payload type.
+     * deliberately inserted before package targets; copy is available for both payload types.
      */
     static List<ShareTarget> applySettings(
             Context context,
@@ -95,6 +95,12 @@ final class ShareTargetRepository {
                 ? DragShareSettings.defaults()
                 : settings;
         Map<String, ShareTarget> visible = new LinkedHashMap<>();
+        if (effective.isCopyEnabled(imagePayload)
+                && effective.isTargetVisible(DragShareSettings.TARGET_COPY)) {
+            visible.put(
+                    DragShareSettings.TARGET_COPY,
+                    ShareTarget.copyToClipboard(loadCopyIcon(context)));
+        }
         if (imagePayload && effective.isTargetVisible(DragShareSettings.TARGET_SAVE_LOCAL)) {
             visible.put(
                     DragShareSettings.TARGET_SAVE_LOCAL,
@@ -116,6 +122,10 @@ final class ShareTargetRepository {
         }
 
         List<ShareTarget> result = new ArrayList<>();
+        ShareTarget copy = visible.remove(DragShareSettings.TARGET_COPY);
+        if (copy != null) {
+            result.add(copy);
+        }
         if (imagePayload) {
             ShareTarget save = visible.remove(DragShareSettings.TARGET_SAVE_LOCAL);
             if (save != null) {
@@ -168,6 +178,10 @@ final class ShareTargetRepository {
 
     static Drawable loadSaveIcon(Context context) {
         return loadBuiltInIcon(context, R.drawable.ic_download);
+    }
+
+    static Drawable loadCopyIcon(Context context) {
+        return loadBuiltInIcon(context, R.drawable.ic_copy);
     }
 
     static Drawable loadTextSegmentationIcon(Context context) {

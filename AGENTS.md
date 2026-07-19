@@ -7,7 +7,7 @@
 ## 工程基线
 
 - 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 33，targetSdk 34，compileSdk 37。
-- 当前版本：`1.7.12`，`versionCode 36`。
+- 当前版本：`1.7.13`，`versionCode 37`。
 - 已验证宿主：传送门 `4.2.1`，包名 `com.miui.contentextension`。
 - LSPosed API：82，入口为 `com.leaf.hyperdragshare.codex.MainHook`。
 - 可靠的同手势跟手依赖 root 读取 Linux evdev；MIUI 输入监听仅作回退。
@@ -100,6 +100,17 @@
 当前应有 46 个单元测试通过，APK 输出到
 `app\build\outputs\apk\debug\app-debug.apk`。交付新的可安装行为时同步递增
 `versionCode` 和 `versionName`；纯文档修改不要求增版。
+
+本机发布签名使用 Git 忽略的 `signing/` 目录及同样被忽略的 `local.properties`：
+
+```properties
+signingStoreFile=signing/my-release-key.jks
+signingInfoFile=signing/qianming.txt
+```
+
+签名信息文件按 `ALIAS`、`KEY_PASSWORD`、`KEYSTORE_PASSWORD` 的字段名与值交替保存。
+不要把 keystore、签名信息、口令或绝对本机路径提交到仓库。配置存在时，`assembleRelease` 会构建
+经 R8 压缩且已签名的 APK，输出为 `app\build\outputs\apk\release\app-release.apk`。
 
 实机排查优先看以下日志：
 

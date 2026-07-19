@@ -41,6 +41,12 @@ public final class DragShareSettingsTest {
         assertEquals(
                 DragShareSettings.DEFAULT_IMAGE_SHARING_ENABLED,
                 settings.imageSharingEnabled);
+        assertEquals(
+                DragShareSettings.DEFAULT_TEXT_COPY_ENABLED,
+                settings.textCopyEnabled);
+        assertEquals(
+                DragShareSettings.DEFAULT_IMAGE_COPY_ENABLED,
+                settings.imageCopyEnabled);
         assertTrue(settings.preloadTextSegmenter);
         assertEquals(
                 DragShareSettings.DEFAULT_SIMPLE_MENU_POSITION,
@@ -218,7 +224,7 @@ public final class DragShareSettingsTest {
     }
 
     @Test
-    public void textSegmentationAppearsOnlyForTextPayloads() {
+    public void builtInActionsAppearForMatchingPayloads() {
         DragShareSettings settings = DragShareSettings.defaults();
 
         List<ShareTarget> textTargets = ShareTargetRepository.applySettings(
@@ -232,10 +238,12 @@ public final class DragShareSettingsTest {
                 settings,
                 true);
 
-        assertEquals(1, textTargets.size());
-        assertTrue(textTargets.get(0).isTextSegmentation());
-        assertEquals(1, imageTargets.size());
-        assertTrue(imageTargets.get(0).isSaveToLocal());
+        assertEquals(2, textTargets.size());
+        assertTrue(textTargets.get(0).isCopyToClipboard());
+        assertTrue(textTargets.get(1).isTextSegmentation());
+        assertEquals(2, imageTargets.size());
+        assertTrue(imageTargets.get(0).isCopyToClipboard());
+        assertTrue(imageTargets.get(1).isSaveToLocal());
     }
 
     @Test
@@ -284,7 +292,7 @@ public final class DragShareSettingsTest {
     }
 
     @Test
-    public void tokenizerPreloadPreferenceRoundTripsAndOldBundlesDefaultToEnabled() {
+    public void tokenizerAndCopyPreferencesRoundTripAndOldBundlesDefaultToEnabled() {
         DragShareSettings settings = new DragShareSettings(
                 DragShareSettings.COLOR_LIGHT,
                 DragShareSettings.STYLE_SIMPLE,
@@ -306,11 +314,36 @@ public final class DragShareSettingsTest {
                 new LinkedHashSet<>(),
                 DragShareSettings.DEFAULT_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS,
                 DragShareSettings.DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
-                false);
+                false,
+                false,
+                true);
 
         assertFalse(settings.preloadTextSegmenter);
+        assertFalse(settings.textCopyEnabled);
+        assertTrue(settings.imageCopyEnabled);
+        assertFalse(settings.isCopyEnabled(false));
+        assertTrue(settings.isCopyEnabled(true));
+        List<ShareTarget> textTargets = ShareTargetRepository.applySettings(
+                null,
+                java.util.Collections.emptyList(),
+                settings,
+                false);
+        List<ShareTarget> imageTargets = ShareTargetRepository.applySettings(
+                null,
+                java.util.Collections.emptyList(),
+                settings,
+                true);
+        assertEquals(1, textTargets.size());
+        assertTrue(textTargets.get(0).isTextSegmentation());
+        assertEquals(2, imageTargets.size());
+        assertTrue(imageTargets.get(0).isCopyToClipboard());
+        assertTrue(imageTargets.get(1).isSaveToLocal());
         assertFalse(DragShareSettings.fromBundle(settings.toBundle()).preloadTextSegmenter);
+        assertFalse(DragShareSettings.fromBundle(settings.toBundle()).textCopyEnabled);
+        assertTrue(DragShareSettings.fromBundle(settings.toBundle()).imageCopyEnabled);
         assertTrue(DragShareSettings.fromBundle(new Bundle()).preloadTextSegmenter);
+        assertTrue(DragShareSettings.fromBundle(new Bundle()).textCopyEnabled);
+        assertTrue(DragShareSettings.fromBundle(new Bundle()).imageCopyEnabled);
     }
 
     @Test

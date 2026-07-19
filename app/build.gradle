@@ -12,8 +12,8 @@ android {
         applicationId 'com.leaf.hyperdragshare.codex'
         minSdk 33
         targetSdk 34
-        versionCode 36
-        versionName '1.7.12'
+        versionCode 38
+        versionName '1.7.14'
     }
 
     compileOptions {
@@ -53,14 +53,37 @@ android {
         checkReleaseBuilds true
     }
 
-    def signingStorePath = System.getenv('SIGNING_KEYSTORE_PATH')
-    if (signingStorePath != null) {
+    def localProperties = new Properties()
+    def localPropertiesFile = rootProject.file('local.properties')
+    if (localPropertiesFile.isFile()) {
+        localPropertiesFile.withInputStream { localProperties.load(it) }
+    }
+    def signingStorePath = localProperties.getProperty(
+            'signingStoreFile', System.getenv('SIGNING_KEYSTORE_PATH'))
+    def signingInfoPath = localProperties.getProperty('signingInfoFile')
+    if (signingStorePath != null && signingInfoPath != null) {
+        def signingInfoLines = rootProject.file(signingInfoPath).readLines('UTF-8')
+                .collect { it.trim() }
+        def signingInfoValue = { String label ->
+            for (int index = 0; index + 1 < signingInfoLines.size(); index++) {
+                if (signingInfoLines[index].equalsIgnoreCase(label)) {
+                    return signingInfoLines[index + 1]
+                }
+            }
+            return null
+        }
+        def signingStorePassword = signingInfoValue('keystore_password')
+        def signingKeyAlias = signingInfoValue('alias')
+        def signingKeyPassword = signingInfoValue('key_password')
+        if (signingStorePassword == null || signingKeyAlias == null || signingKeyPassword == null) {
+            throw new GradleException('Local signing information is incomplete')
+        }
         signingConfigs {
             release {
-                storeFile file(signingStorePath)
-                storePassword System.getenv('SIGNING_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('SIGNING_KEY_ALIAS')
-                keyPassword System.getenv('SIGNING_KEY_PASSWORD')
+                storeFile rootProject.file(signingStorePath)
+                storePassword signingStorePassword
+                keyAlias signingKeyAlias
+                keyPassword signingKeyPassword
             }
         }
     }
@@ -70,7 +93,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (signingStorePath != null) {
+            if (signingStorePath != null && signingInfoPath != null) {
                 signingConfig signingConfigs.release
             }
         }
