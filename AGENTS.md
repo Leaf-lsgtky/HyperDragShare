@@ -7,7 +7,7 @@
 ## 工程基线
 
 - 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 33，targetSdk 34，compileSdk 37。
-- 当前版本：`1.7.17`，`versionCode 41`。
+- 当前版本：`1.7.19`，`versionCode 43`。
 - 已验证宿主：传送门 `4.2.1`，包名 `com.miui.contentextension`。
 - LSPosed API：82，入口为 `com.leaf.hyperdragshare.codex.MainHook`。
 - 可靠的同手势跟手依赖 root 读取 Linux evdev；MIUI 输入监听仅作回退。

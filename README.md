@@ -38,6 +38,10 @@ HyperDragShare 是一个 Android LSPosed 模块，为 HyperOS 传送门的文字
 
 向 GitHub 推送形如 `v1.7.12` 的 tag 后，GitHub Actions 会执行测试、Lint，并通过 R8 构建已签名的 Release APK，随后自动创建对应的 GitHub Release 与 APK 附件。
 
+## 许可证
+
+HyperDragShare 以 [GNU General Public License v3.0](LICENSE)（`GPL-3.0-only`）发布。第三方组件的许可详见应用内“开放源代码许可”页面和 `app/src/main/cpp/NOTICE`。
+
 ## 说明
 
 实现边界、输入源仲裁和兼容性约束记录在 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。

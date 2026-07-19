@@ -1245,11 +1245,13 @@ final class DragShareController {
         active = false;
         stopEdgeScroll();
         backgroundTouchBlocker.stop();
-        removeGestureViews();
         if (afterDeactivate != null) {
             afterDeactivate.run();
         }
 
+        // HyperOS can silently reject an AccessibilityService activity start after its last
+        // accessibility overlay has been removed. Keep the passive overlay attached through
+        // the user-selected launch, then clean it up in the same main-thread turn.
         if (allowShare && target != null && finished != null) {
             if (!finished.payload.isImage()
                     || finished.stagedUri != null) {
@@ -1261,6 +1263,7 @@ final class DragShareController {
         } else if (finished != null && finished.pendingTarget == null) {
             finished.cancelled = true;
         }
+        removeGestureViews();
     }
 
     private void cancelGestureOnMain() {
