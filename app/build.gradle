@@ -63,8 +63,14 @@ android {
                 keyPassword System.getenv('SIGNING_KEY_PASSWORD')
             }
         }
-        buildTypes {
-            release {
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (signingStorePath != null) {
                 signingConfig signingConfigs.release
             }
         }
