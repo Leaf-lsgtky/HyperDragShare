@@ -171,6 +171,10 @@ final class AccessibilityContentCaptureSource {
                 gestureDetector.latestX(),
                 gestureDetector.latestY(),
                 settings);
+        // beginDragging() only succeeds while the physical root gesture is
+        // still down. Confirm that active root session synchronously so the
+        // lock cannot be queued behind its eventual ACTION_UP.
+        controller.onRootDragSessionStarted();
         service.trace("gesture=" + gestureId + " controller show requested kind=" + content.kind);
         DragShareLog.i(TAG, "gesture=" + gestureId + " controller shown kind=" + content.kind);
     }

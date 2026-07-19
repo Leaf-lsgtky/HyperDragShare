@@ -404,6 +404,19 @@ public final class DragShareSettingsTest {
     }
 
     @Test
+    public void backgroundScrollSettingRoundTripsThroughPortalBundle() {
+        DragShareSettings settings = new DragShareSettings(
+                DragShareSettings.COLOR_LIGHT,
+                DragShareSettings.STYLE_SIMPLE,
+                DragShareSettings.DEFAULT_EDGE_TRIGGER_DP,
+                DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
+                true);
+
+        assertTrue(settings.blockBackgroundScroll);
+        assertTrue(DragShareSettings.fromBundle(settings.toBundle()).blockBackgroundScroll);
+    }
+
+    @Test
     public void accessibilityBlacklistCombinesUserAndBuiltInPackages() {
         assertTrue(AccessibilityBlacklist.isBlockedByPackages(
                 "pkg.user",

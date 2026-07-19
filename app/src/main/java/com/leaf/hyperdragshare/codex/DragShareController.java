@@ -295,6 +295,15 @@ final class DragShareController {
         });
     }
 
+    /** Called by a root-backed source after it has created an active drag session. */
+    void onRootDragSessionStarted() {
+        runOnMain(() -> {
+            if (active) {
+                startBackgroundBlockerIfEnabled();
+            }
+        });
+    }
+
     void finishFromControlEvent() {
         mainHandler.post(() -> {
             if (!active) {
@@ -736,7 +745,8 @@ final class DragShareController {
         }
         // Only pilfer once the authoritative root stream has produced an
         // event. The MIUI fallback cannot safely consume its synthetic cancel.
-        if ("root".equals(source) && action != MotionEvent.ACTION_UP) {
+        if ("root".equals(source)
+                && (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE)) {
             startBackgroundBlockerIfEnabled();
         }
         if (eventTime == lastHandledEventTime && action == lastHandledAction
