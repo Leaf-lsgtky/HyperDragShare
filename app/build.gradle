@@ -61,6 +61,9 @@ android {
     def signingStorePath = localProperties.getProperty(
             'signingStoreFile', System.getenv('SIGNING_KEYSTORE_PATH'))
     def signingInfoPath = localProperties.getProperty('signingInfoFile')
+    def signingStorePassword = null
+    def signingKeyAlias = null
+    def signingKeyPassword = null
     if (signingStorePath != null && signingInfoPath != null) {
         def signingInfoLines = rootProject.file(signingInfoPath).readLines('UTF-8')
                 .collect { it.trim() }
@@ -72,12 +75,22 @@ android {
             }
             return null
         }
-        def signingStorePassword = signingInfoValue('keystore_password')
-        def signingKeyAlias = signingInfoValue('alias')
-        def signingKeyPassword = signingInfoValue('key_password')
+        signingStorePassword = signingInfoValue('keystore_password')
+        signingKeyAlias = signingInfoValue('alias')
+        signingKeyPassword = signingInfoValue('key_password')
         if (signingStorePassword == null || signingKeyAlias == null || signingKeyPassword == null) {
             throw new GradleException('Local signing information is incomplete')
         }
+    } else {
+        signingStorePassword = System.getenv('SIGNING_KEYSTORE_PASSWORD')
+        signingKeyAlias = System.getenv('SIGNING_KEY_ALIAS')
+        signingKeyPassword = System.getenv('SIGNING_KEY_PASSWORD')
+    }
+    def hasReleaseSigning = signingStorePath != null
+            && signingStorePassword != null
+            && signingKeyAlias != null
+            && signingKeyPassword != null
+    if (hasReleaseSigning) {
         signingConfigs {
             release {
                 storeFile rootProject.file(signingStorePath)
@@ -93,7 +106,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (signingStorePath != null && signingInfoPath != null) {
+            if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
         }

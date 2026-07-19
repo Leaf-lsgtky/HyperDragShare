@@ -111,6 +111,8 @@ signingInfoFile=signing/qianming.txt
 签名信息文件按 `ALIAS`、`KEY_PASSWORD`、`KEYSTORE_PASSWORD` 的字段名与值交替保存。
 不要把 keystore、签名信息、口令或绝对本机路径提交到仓库。配置存在时，`assembleRelease` 会构建
 经 R8 压缩且已签名的 APK，输出为 `app\build\outputs\apk\release\app-release.apk`。
+云端 Release 使用 `SIGNING_KEYSTORE_PATH`、`SIGNING_KEYSTORE_PASSWORD`、`SIGNING_KEY_ALIAS` 和
+`SIGNING_KEY_PASSWORD` 环境变量配置同一 signingConfig；工作流只发布非 `-unsigned` 的 APK。
 
 实机排查优先看以下日志：
 

@@ -40,11 +40,18 @@ jobs:
           chmod +x gradlew
           ./gradlew testDebugUnitTest lintDebug assembleRelease
 
+      - name: Locate signed release APK
+        id: release_apk
+        run: |
+          mapfile -t apk_paths < <(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' ! -name '*-unsigned.apk')
+          test "${#apk_paths[@]}" -eq 1
+          echo "path=${apk_paths[0]}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
-          "app/build/outputs/apk/release/app-release.apk#HyperDragShare-${GITHUB_REF_NAME}.apk"
+          "${{ steps.release_apk.outputs.path }}#HyperDragShare-${GITHUB_REF_NAME}.apk"
           --title "HyperDragShare ${GITHUB_REF_NAME}"
           --generate-notes
