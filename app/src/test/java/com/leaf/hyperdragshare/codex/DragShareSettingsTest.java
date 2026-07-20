@@ -177,6 +177,39 @@ public final class DragShareSettingsTest {
     }
 
     @Test
+    public void portalSettingsRetainSimpleMenuBackgroundOpacity() {
+        DragShareSettings settings = new DragShareSettings(
+                DragShareSettings.COLOR_LIGHT,
+                DragShareSettings.STYLE_SIMPLE,
+                DragShareSettings.DEFAULT_EDGE_TRIGGER_DP,
+                DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
+                false,
+                true,
+                true,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_POSITION,
+                DragShareSettings.MIN_SIMPLE_MENU_OPACITY_PERCENT,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_CORNER_RADIUS_DP,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_EDGE_DISTANCE_DP,
+                DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT,
+                true,
+                new LinkedHashSet<>(),
+                Arrays.asList(),
+                DragShareSettings.CONTENT_CAPTURE_PORTAL);
+
+        DragShareSettings portalSettings = DragShareSettings.fromBundle(settings.toBundle());
+
+        assertTrue(portalSettings.isPortalCaptureMode());
+        assertEquals(
+                DragShareSettings.MIN_SIMPLE_MENU_OPACITY_PERCENT,
+                portalSettings.simpleMenuOpacityPercent);
+        assertEquals(
+                0.2f,
+                DragShareController.simpleMenuBackgroundOpacityFraction(
+                        portalSettings.simpleMenuOpacityPercent),
+                0f);
+    }
+
+    @Test
     public void edgeDistanceAndIconOpacityAreClamped() {
         DragShareSettings settings = new DragShareSettings(
                 DragShareSettings.COLOR_LIGHT,

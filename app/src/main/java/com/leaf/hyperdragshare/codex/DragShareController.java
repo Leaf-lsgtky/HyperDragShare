@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.Outline;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
@@ -28,6 +29,7 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
+import android.view.ViewOutlineProvider;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -613,22 +615,25 @@ final class DragShareController {
         }
         int horizontalPadding = dp(portalStyle ? 10 : 4);
         int verticalPadding = dp(portalStyle ? 4 : 4);
-        menuView.setPadding(
+        int bottomPadding = dp(portalStyle ? 2 : 4);
+        if (portalStyle) {
+            menuView.setBackground(roundDrawable(Color.TRANSPARENT, 0));
+        } else {
+            addSimpleMenuBackground();
+        }
+        menuView.setElevation(dp(portalStyle ? 0 : 10));
+
+        FrameLayout menuContent = new FrameLayout(context);
+        menuContent.setClipChildren(false);
+        menuContent.setClipToPadding(false);
+        menuContent.setPadding(
                 horizontalPadding,
                 verticalPadding,
                 horizontalPadding,
-                dp(portalStyle ? 2 : 4));
-        menuView.setBackground(portalStyle
-                ? roundDrawable(Color.TRANSPARENT, 0)
-                : roundDrawable(
-                        applyAbsoluteOpacity(
-                                palette.menuBackground,
-                                settings.simpleMenuOpacityPercent),
-                        settings.simpleMenuCornerRadiusDp));
-        if (!portalStyle) {
-            menuView.setClipToOutline(true);
-        }
-        menuView.setElevation(dp(portalStyle ? 0 : 10));
+                bottomPadding);
+        menuView.addView(menuContent, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         menuRow = new LinearLayout(context);
         menuRow.setOrientation(vertical ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
@@ -644,7 +649,7 @@ final class DragShareController {
             menuVerticalScroll.addView(menuRow, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
-            menuView.addView(menuVerticalScroll, new FrameLayout.LayoutParams(
+            menuContent.addView(menuVerticalScroll, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
         } else {
@@ -657,7 +662,7 @@ final class DragShareController {
             menuScroll.addView(menuRow, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-            menuView.addView(menuScroll, new FrameLayout.LayoutParams(
+            menuContent.addView(menuScroll, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -678,7 +683,7 @@ final class DragShareController {
                         screenWidth,
                         ViewGroup.LayoutParams.MATCH_PARENT));
             } else {
-                menuView.addView(empty, new FrameLayout.LayoutParams(
+                menuContent.addView(empty, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
             }
@@ -731,6 +736,27 @@ final class DragShareController {
         menuParams = overlayParams(menuWidth, menuHeight, "DragShare targets");
         menuParams.x = menuLeft;
         menuParams.y = menuTop;
+    }
+
+    private void addSimpleMenuBackground() {
+        int cornerRadiusDp = settings.simpleMenuCornerRadiusDp;
+        View background = new View(context);
+        background.setBackground(roundDrawable(
+                applyAbsoluteOpacity(palette.menuBackground, 100),
+                cornerRadiusDp));
+        background.setAlpha(simpleMenuBackgroundOpacityFraction(
+                settings.simpleMenuOpacityPercent));
+        menuView.addView(background, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        int cornerRadiusPx = dp(cornerRadiusDp);
+        menuView.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadiusPx);
+            }
+        });
+        menuView.setClipToOutline(true);
     }
 
     private void handleMotionOnMain(
@@ -1676,6 +1702,10 @@ final class DragShareController {
     private static int applyAbsoluteOpacity(int color, int percent) {
         int alpha = Math.round(255f * (Math.max(0, Math.min(100, percent)) / 100f));
         return (color & 0x00FFFFFF) | (alpha << 24);
+    }
+
+    static float simpleMenuBackgroundOpacityFraction(int percent) {
+        return Math.max(0, Math.min(100, percent)) / 100f;
     }
 
     private GradientDrawable roundDrawable(int color, int radiusDp) {

@@ -4,10 +4,12 @@
 `docs/IMPLEMENTATION.md` 是实现事实来源；`E:\workspace\TaplusContentPreview`
 只可作为早期传送门内容抓取思路的参考，不代表可运行基线。
 
+如果文档内部分内容与实际工程不符，需实时修订文档。
+
 ## 工程基线
 
 - 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 33，targetSdk 34，compileSdk 37。
-- 当前版本：`1.7.19`，`versionCode 43`。
+- 当前版本：`1.7.20`，`versionCode 44`。
 - 已验证宿主：传送门 `4.2.1`，包名 `com.miui.contentextension`。
 - LSPosed API：82，入口为 `com.leaf.hyperdragshare.codex.MainHook`。
 - 可靠的同手势跟手依赖 root 读取 Linux evdev；MIUI 输入监听仅作回退。
@@ -97,7 +99,7 @@
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug
 ```
 
-当前应有 62 个单元测试通过，APK 输出到
+当前应有 63 个单元测试通过，APK 输出到
 `app\build\outputs\apk\debug\app-debug.apk`。交付新的可安装行为时同步递增
 `versionCode` 和 `versionName`；纯文档修改不要求增版。
 
