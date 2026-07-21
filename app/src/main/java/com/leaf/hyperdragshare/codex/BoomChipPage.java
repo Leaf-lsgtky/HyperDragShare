@@ -3,7 +3,6 @@ package com.leaf.hyperdragshare.codex;
 import android.app.Activity;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -60,7 +59,7 @@ public class BoomChipPage {
                 return;
             }
             if (mTouchedX == -1 || mTouchedY == -1) {
-                Log.e(TAG, "WTF, bad touch position passed");
+                DragShareLog.e(TAG, "bad touch position passed");
                 return;
             }
             float pageX = getChipParentX();

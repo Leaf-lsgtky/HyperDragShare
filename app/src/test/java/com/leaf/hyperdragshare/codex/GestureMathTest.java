@@ -44,6 +44,25 @@ public final class GestureMathTest {
     }
 
     @Test
+    public void edgeScrollSpeedStartsSoftAndReachesMaximumJustInsideThePhysicalEdge() {
+        assertEquals(0f, GestureMath.edgeScrollSpeedMultiplier(540, 1080, 56, 8), 0.001f);
+        assertEquals(0.2f, GestureMath.edgeScrollSpeedMultiplier(56, 1080, 56, 8), 0.001f);
+        float leftBeforeFullSpeed = GestureMath.edgeScrollSpeedMultiplier(9, 1080, 56, 8);
+        assertTrue(leftBeforeFullSpeed > 0.2f);
+        assertTrue(leftBeforeFullSpeed < 1f);
+        assertEquals(1f, GestureMath.edgeScrollSpeedMultiplier(8, 1080, 56, 8), 0.001f);
+        assertEquals(1f, GestureMath.edgeScrollSpeedMultiplier(0, 1080, 56, 8), 0.001f);
+
+        float rightEntry = GestureMath.edgeScrollSpeedMultiplier(1024, 1080, 56, 8);
+        float rightBeforeFullSpeed = GestureMath.edgeScrollSpeedMultiplier(1070, 1080, 56, 8);
+        assertEquals(0.2f, rightEntry, 0.001f);
+        assertTrue(rightBeforeFullSpeed > rightEntry);
+        assertTrue(rightBeforeFullSpeed < 1f);
+        assertEquals(1f, GestureMath.edgeScrollSpeedMultiplier(1071, 1080, 56, 8), 0.001f);
+        assertEquals(1f, GestureMath.edgeScrollSpeedMultiplier(1079, 1080, 56, 8), 0.001f);
+    }
+
+    @Test
     public void clampKeepsCoordinatesWithinViewport() {
         assertEquals(8, GestureMath.clamp(-10, 8, 100));
         assertEquals(40, GestureMath.clamp(40, 8, 100));

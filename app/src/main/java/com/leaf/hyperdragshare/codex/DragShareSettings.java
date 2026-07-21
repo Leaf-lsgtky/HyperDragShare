@@ -22,6 +22,15 @@ public final class DragShareSettings {
     public static final int CONTENT_CAPTURE_ACCESSIBILITY = 1;
     public static final int DEFAULT_CONTENT_CAPTURE_MODE = CONTENT_CAPTURE_PORTAL;
 
+    public static final int LOG_LEVEL_DISABLED = 0;
+    public static final int LOG_LEVEL_INFO = 1;
+    public static final int LOG_LEVEL_DEBUG = 2;
+    public static final int DEFAULT_LOG_LEVEL = LOG_LEVEL_INFO;
+
+    public static final int LOG_DESTINATION_SYSTEM = 0;
+    public static final int LOG_DESTINATION_FILE = 1;
+    public static final int DEFAULT_LOG_DESTINATION = LOG_DESTINATION_SYSTEM;
+
     /** Change notification only; settings values remain behind the trusted Provider RPC. */
     private static final String SETTINGS_URI_VALUE = "content://com.leaf.hyperdragshare.codex.share/settings";
 
@@ -33,6 +42,7 @@ public final class DragShareSettings {
     public static final int STYLE_CIRCLE = 2;
     /** HyperOS View-blurred overlay with an adaptive square preview. */
     public static final int STYLE_MODERN = 3;
+    public static final int DEFAULT_UI_STYLE = STYLE_MODERN;
     /** @deprecated Kept as a source-compatibility alias for pre-1.4 callers. */
     @Deprecated
     public static final int STYLE_CARD = STYLE_PORTAL;
@@ -133,6 +143,8 @@ public final class DragShareSettings {
             "accessibility_long_press_timeout_millis";
     private static final String KEY_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT =
             "accessibility_recognition_sensitivity_percent";
+    private static final String KEY_LOG_LEVEL = "log_level";
+    private static final String KEY_LOG_DESTINATION = "log_destination";
 
     public final int colorMode;
     public final int contentCaptureMode;
@@ -157,12 +169,14 @@ public final class DragShareSettings {
     public final Set<String> accessibilityBlacklistedPackages;
     public final int accessibilityLongPressTimeoutMillis;
     public final int accessibilityRecognitionSensitivityPercent;
+    public final int logLevel;
+    public final int logDestination;
 
     /** Backward-compatible constructor for callers using the original settings shape. */
     public DragShareSettings(int colorMode, int edgeTriggerDp, int scrollSpeedDpPerSecond) {
         this(
                 colorMode,
-                STYLE_SIMPLE,
+                DEFAULT_UI_STYLE,
                 edgeTriggerDp,
                 scrollSpeedDpPerSecond,
                 DEFAULT_BLOCK_BACKGROUND_SCROLL,
@@ -557,13 +571,69 @@ public final class DragShareSettings {
             boolean preloadTextSegmenter,
             int modernBlurRadiusDp,
             int modernGlassOpacityPercent) {
+        this(
+                colorMode,
+                uiStyle,
+                edgeTriggerDp,
+                scrollSpeedDpPerSecond,
+                blockBackgroundScroll,
+                textSharingEnabled,
+                imageSharingEnabled,
+                simpleMenuPosition,
+                simpleMenuOpacityPercent,
+                simpleMenuCornerRadiusDp,
+                simpleMenuEdgeDistanceDp,
+                iconOpacityPercent,
+                closeMenuWhenPointerLeaves,
+                hiddenTargetKeys,
+                targetOrder,
+                contentCaptureMode,
+                accessibilityLandscapeRecognitionEnabled,
+                accessibilityBlacklistedPackages,
+                accessibilityLongPressTimeoutMillis,
+                accessibilityRecognitionSensitivityPercent,
+                preloadTextSegmenter,
+                modernBlurRadiusDp,
+                modernGlassOpacityPercent,
+                DEFAULT_LOG_LEVEL,
+                DEFAULT_LOG_DESTINATION);
+    }
+
+    /** Full constructor including diagnostic logging configuration. */
+    public DragShareSettings(
+            int colorMode,
+            int uiStyle,
+            int edgeTriggerDp,
+            int scrollSpeedDpPerSecond,
+            boolean blockBackgroundScroll,
+            boolean textSharingEnabled,
+            boolean imageSharingEnabled,
+            int simpleMenuPosition,
+            int simpleMenuOpacityPercent,
+            int simpleMenuCornerRadiusDp,
+            int simpleMenuEdgeDistanceDp,
+            int iconOpacityPercent,
+            boolean closeMenuWhenPointerLeaves,
+            Set<String> hiddenTargetKeys,
+            List<String> targetOrder,
+            int contentCaptureMode,
+            boolean accessibilityLandscapeRecognitionEnabled,
+            Set<String> accessibilityBlacklistedPackages,
+            int accessibilityLongPressTimeoutMillis,
+            int accessibilityRecognitionSensitivityPercent,
+            boolean preloadTextSegmenter,
+            int modernBlurRadiusDp,
+            int modernGlassOpacityPercent,
+            int logLevel,
+            int logDestination) {
         this.colorMode = colorMode == COLOR_DARK ? COLOR_DARK : COLOR_LIGHT;
         this.contentCaptureMode = normalizeContentCaptureMode(contentCaptureMode);
-        this.uiStyle = uiStyle == STYLE_PORTAL
+        this.uiStyle = uiStyle == STYLE_SIMPLE
+                || uiStyle == STYLE_PORTAL
                 || uiStyle == STYLE_CIRCLE
                 || uiStyle == STYLE_MODERN
                 ? uiStyle
-                : STYLE_SIMPLE;
+                : DEFAULT_UI_STYLE;
         this.edgeTriggerDp = clamp(
                 edgeTriggerDp,
                 MIN_EDGE_TRIGGER_DP,
@@ -613,12 +683,14 @@ public final class DragShareSettings {
                 accessibilityRecognitionSensitivityPercent,
                 MIN_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
                 MAX_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT);
+        this.logLevel = normalizeLogLevel(logLevel);
+        this.logDestination = normalizeLogDestination(logDestination);
     }
 
     public static DragShareSettings defaults() {
         return new DragShareSettings(
                 COLOR_LIGHT,
-                STYLE_SIMPLE,
+                DEFAULT_UI_STYLE,
                 DEFAULT_EDGE_TRIGGER_DP,
                 DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
                 DEFAULT_BLOCK_BACKGROUND_SCROLL,
@@ -648,7 +720,7 @@ public final class DragShareSettings {
                 preferences.getBoolean(KEY_IMAGE_COPY_ENABLED, true));
         return new DragShareSettings(
                 preferences.getInt(KEY_COLOR_MODE, COLOR_LIGHT),
-                preferences.getInt(KEY_UI_STYLE, STYLE_SIMPLE),
+                preferences.getInt(KEY_UI_STYLE, DEFAULT_UI_STYLE),
                 preferences.getInt(KEY_EDGE_TRIGGER_DP, DEFAULT_EDGE_TRIGGER_DP),
                 preferences.getInt(
                         KEY_SCROLL_SPEED,
@@ -705,7 +777,9 @@ public final class DragShareSettings {
                         DEFAULT_MODERN_BLUR_RADIUS_DP),
                 preferences.getInt(
                         KEY_MODERN_GLASS_OPACITY,
-                        DEFAULT_MODERN_GLASS_OPACITY_PERCENT));
+                        DEFAULT_MODERN_GLASS_OPACITY_PERCENT),
+                preferences.getInt(KEY_LOG_LEVEL, DEFAULT_LOG_LEVEL),
+                preferences.getInt(KEY_LOG_DESTINATION, DEFAULT_LOG_DESTINATION));
     }
 
     public void saveLocal(Context context) {
@@ -749,7 +823,12 @@ public final class DragShareSettings {
                 .putInt(
                         KEY_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
                         accessibilityRecognitionSensitivityPercent)
+                .putInt(KEY_LOG_LEVEL, logLevel)
+                .putInt(KEY_LOG_DESTINATION, logDestination)
                 .apply();
+        DragShareLog.configure(this);
+        DragShareLog.i("DragShare/Settings", "logging configured level=" + logLevel
+                + " destination=" + logDestination);
         context.getContentResolver().notifyChange(settingsUri(), null);
     }
 
@@ -809,6 +888,8 @@ public final class DragShareSettings {
         result.putInt(
                 KEY_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
                 accessibilityRecognitionSensitivityPercent);
+        result.putInt(KEY_LOG_LEVEL, logLevel);
+        result.putInt(KEY_LOG_DESTINATION, logDestination);
         return result;
     }
 
@@ -828,7 +909,7 @@ public final class DragShareSettings {
                 bundle.getBoolean(KEY_IMAGE_COPY_ENABLED, true));
         return new DragShareSettings(
                 bundle.getInt(KEY_COLOR_MODE, COLOR_LIGHT),
-                bundle.getInt(KEY_UI_STYLE, STYLE_SIMPLE),
+                bundle.getInt(KEY_UI_STYLE, DEFAULT_UI_STYLE),
                 bundle.getInt(KEY_EDGE_TRIGGER_DP, DEFAULT_EDGE_TRIGGER_DP),
                 bundle.getInt(
                         KEY_SCROLL_SPEED,
@@ -885,7 +966,9 @@ public final class DragShareSettings {
                         DEFAULT_MODERN_BLUR_RADIUS_DP),
                 bundle.getInt(
                         KEY_MODERN_GLASS_OPACITY,
-                        DEFAULT_MODERN_GLASS_OPACITY_PERCENT));
+                        DEFAULT_MODERN_GLASS_OPACITY_PERCENT),
+                bundle.getInt(KEY_LOG_LEVEL, DEFAULT_LOG_LEVEL),
+                bundle.getInt(KEY_LOG_DESTINATION, DEFAULT_LOG_DESTINATION));
     }
 
     public boolean isSharingEnabled(boolean image) {
@@ -1039,5 +1122,18 @@ public final class DragShareSettings {
                 timeoutMillis,
                 MIN_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS,
                 MAX_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS);
+    }
+
+    private static int normalizeLogLevel(int level) {
+        if (level == LOG_LEVEL_DISABLED || level == LOG_LEVEL_DEBUG) {
+            return level;
+        }
+        return LOG_LEVEL_INFO;
+    }
+
+    private static int normalizeLogDestination(int destination) {
+        return destination == LOG_DESTINATION_FILE
+                ? LOG_DESTINATION_FILE
+                : LOG_DESTINATION_SYSTEM;
     }
 }

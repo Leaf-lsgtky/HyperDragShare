@@ -1,6 +1,8 @@
 package com.leaf.hyperdragshare.codex;
 
 final class GestureMath {
+    private static final float EDGE_SCROLL_ENTRY_SPEED_MULTIPLIER = 0.2f;
+
     private GestureMath() {}
 
     static boolean shouldShowMenu(float pointerY, int triggerTop) {
@@ -39,6 +41,39 @@ final class GestureMath {
             return 1;
         }
         return 0;
+    }
+
+    static float edgeScrollSpeedMultiplier(
+            float pointerCoordinate,
+            int viewportSize,
+            int edgeWidth,
+            int fullSpeedInset) {
+        int direction = edgeScrollDirection(pointerCoordinate, viewportSize, edgeWidth);
+        if (direction == 0) {
+            return 0f;
+        }
+
+        // Motion coordinates end at viewportSize - 1. Keep the physical outer edge at 1x.
+        float maximumDistanceFromEdge = direction < 0
+                ? edgeWidth
+                : Math.max(0, edgeWidth - 1);
+        if (maximumDistanceFromEdge == 0f) {
+            return 1f;
+        }
+        float distanceFromEdge = direction < 0
+                ? Math.max(0f, pointerCoordinate)
+                : Math.max(0f, viewportSize - 1f - pointerCoordinate);
+        float clampedFullSpeedInset = Math.min(
+                maximumDistanceFromEdge,
+                Math.max(0, fullSpeedInset));
+        float accelerationDistance = maximumDistanceFromEdge - clampedFullSpeedInset;
+        if (accelerationDistance == 0f) {
+            return 1f;
+        }
+        float depth = clamp01(
+                (maximumDistanceFromEdge - distanceFromEdge) / accelerationDistance);
+        return EDGE_SCROLL_ENTRY_SPEED_MULTIPLIER
+                + (1f - EDGE_SCROLL_ENTRY_SPEED_MULTIPLIER) * depth * depth;
     }
 
     static int clamp(int value, int minimum, int maximum) {

@@ -13,7 +13,6 @@ import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.provider.OpenableColumns;
 import android.provider.MediaStore;
-import android.util.Log;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -88,7 +87,7 @@ public final class ShareImageProvider extends ContentProvider {
         grantReadAccessAsOwner(
                 MainHook.TAPLUS_PACKAGE,
                 uri);
-        Log.i(TAG, "staged bytes=" + bytes.length);
+        DragShareLog.i(TAG, "staged bytes=" + bytes.length);
         Bundle result = new Bundle();
         result.putString(ImageStagingClient.RESULT_URI, uri.toString());
         return result;
@@ -103,7 +102,7 @@ public final class ShareImageProvider extends ContentProvider {
         if (!file.isFile()) {
             throw new FileNotFoundException(uri.toString());
         }
-        Log.i(TAG, "open uid=" + Binder.getCallingUid() + " bytes=" + file.length());
+        DragShareLog.i(TAG, "open uid=" + Binder.getCallingUid() + " bytes=" + file.length());
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
     }
 
@@ -172,7 +171,7 @@ public final class ShareImageProvider extends ContentProvider {
         grantReadAccessAsOwner(
                 packageName,
                 uri);
-        Log.i(TAG, "granted package=" + packageName);
+        DragShareLog.i(TAG, "granted package=" + packageName);
         Bundle result = new Bundle();
         result.putBoolean(ImageStagingClient.RESULT_GRANTED, true);
         return result;

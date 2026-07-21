@@ -42,6 +42,9 @@ final class RootTouchSource {
     private int rawMaxX;
     private int rawMaxY;
     private boolean firstEventLogged;
+    private String discoveredDevices = "";
+    private int rawEventsInFrame;
+    private long rawFrameCount;
 
     RootTouchSource(Context context, Listener listener) {
         this.context = context;
@@ -55,6 +58,11 @@ final class RootTouchSource {
         }
         ready = false;
         running = true;
+        firstEventLogged = false;
+        discoveredDevices = "";
+        rawEventsInFrame = 0;
+        rawFrameCount = 0L;
+        DragShareLog.d(TAG, "root input start requested");
         thread = new Thread(this::runLoop, "drag-share-root-input");
         thread.setDaemon(true);
         thread.start();
@@ -84,9 +92,15 @@ final class RootTouchSource {
 
     private void runLoop() {
         try {
+            DragShareLog.d(TAG, "starting touchscreen discovery");
             String devicePath = findTouchDevice();
             if (devicePath == null) {
                 log("no direct touchscreen device found");
+                DragShareDiagnostics.captureInputFailure(
+                        context,
+                        "no touchscreen candidate",
+                        discoveredDevices,
+                        null);
                 return;
             }
             int[] ranges = readCoordinateRanges(devicePath);
@@ -94,6 +108,11 @@ final class RootTouchSource {
             rawMaxY = ranges[1];
             if (rawMaxX <= 0 || rawMaxY <= 0) {
                 log("invalid coordinate range for " + devicePath);
+                DragShareDiagnostics.captureInputFailure(
+                        context,
+                        "invalid coordinate range for " + devicePath,
+                        discoveredDevices,
+                        null);
                 return;
             }
 
@@ -105,12 +124,26 @@ final class RootTouchSource {
                     + " raw=" + rawMaxX + "x" + rawMaxY
                     + " screen=" + metrics.widthPixels + "x" + metrics.heightPixels
                     + " eventSize=" + inputEventSize());
+            DragShareLog.d(TAG, "starting evdev read loop path=" + devicePath);
             readEvents(stream);
         } catch (Throwable error) {
             if (running) {
                 log("input loop failed", error);
+                DragShareDiagnostics.captureInputFailure(
+                        context,
+                        "input loop failed:" + error.getClass().getSimpleName(),
+                        discoveredDevices,
+                        null);
             }
         } finally {
+            if (running && !firstEventLogged) {
+                DragShareLog.d(TAG, "input stream ended before a decoded pointer action");
+                DragShareDiagnostics.captureInputFailure(
+                        context,
+                        "stream ended without decoded pointer action",
+                        discoveredDevices,
+                        null);
+            }
             parser.cancel();
             ready = false;
             closeQuietly(inputStream);
@@ -131,6 +164,8 @@ final class RootTouchSource {
         } catch (IOException ignored) {
             // Some Android builds deny the read; others return an empty filtered view.
         }
+        discoveredDevices = devices;
+        DragShareLog.d(TAG, "host /proc/bus/input/devices:\n" + devices);
 
         String devicePath = findTouchDevicePath(devices);
         if (devicePath != null) {
@@ -144,6 +179,8 @@ final class RootTouchSource {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while finding touchscreen", interrupted);
         }
+        discoveredDevices = devices;
+        DragShareLog.d(TAG, "root /proc/bus/input/devices:\n" + devices);
         return findTouchDevicePath(devices);
     }
 
@@ -181,6 +218,12 @@ final class RootTouchSource {
 
     private int[] readCoordinateRanges(String devicePath) throws IOException, InterruptedException {
         String output = runRootTextCommand("getevent -lp " + devicePath);
+        DragShareLog.d(TAG, "input capability path=" + devicePath + ":\n" + output);
+        DragShareDiagnostics.captureInputInventory(
+                context,
+                "root input range probe " + devicePath,
+                discoveredDevices,
+                output);
         return new int[]{parseMaximum(MAX_X, output), parseMaximum(MAX_Y, output)};
     }
 
@@ -191,12 +234,19 @@ final class RootTouchSource {
 
     private InputStream openDevice(String devicePath) throws IOException {
         try {
-            return new FileInputStream(devicePath);
+            InputStream stream = new FileInputStream(devicePath);
+            DragShareLog.d(TAG, "opened input device directly path=" + devicePath);
+            return stream;
         } catch (IOException directFailure) {
+            DragShareLog.d(TAG, "direct input open failed path=" + devicePath
+                    + " error=" + directFailure.getClass().getSimpleName()
+                    + ':' + String.valueOf(directFailure.getMessage())
+                    + "; retrying through root");
             java.lang.Process rootProcess = new ProcessBuilder(
                     "su", "-c", "exec cat " + devicePath)
                     .start();
             process = rootProcess;
+            DragShareLog.d(TAG, "opened input device through root cat path=" + devicePath);
             return rootProcess.getInputStream();
         }
     }
@@ -235,6 +285,19 @@ final class RootTouchSource {
     }
 
     private void consumeEvent(int type, int code, int value) {
+        if (DragShareLog.isDebugEnabled()) {
+            rawEventsInFrame++;
+            if (rawFrameCount < 12L) {
+                DragShareLog.d(TAG, "raw evdev event type=" + type
+                        + " code=" + code + " value=" + value);
+            }
+            if (type == EvdevTouchParser.EV_SYN && code == EvdevTouchParser.SYN_REPORT) {
+                rawFrameCount++;
+                DragShareLog.d(TAG, "raw evdev frame=" + rawFrameCount
+                        + " events=" + rawEventsInFrame);
+                rawEventsInFrame = 0;
+            }
+        }
         parser.consume(type, code, value);
     }
 
@@ -243,6 +306,9 @@ final class RootTouchSource {
             return;
         }
         float[] screenPoint = toScreenCoordinates(rawX, rawY);
+        DragShareLog.d(TAG, "decoded " + MotionEvent.actionToString(action)
+                + " raw=" + Math.round(rawX) + ',' + Math.round(rawY)
+                + " mapped=" + Math.round(screenPoint[0]) + ',' + Math.round(screenPoint[1]));
         emit(action, screenPoint[0], screenPoint[1]);
     }
 

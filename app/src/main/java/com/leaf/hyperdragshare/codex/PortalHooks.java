@@ -49,12 +49,14 @@ final class PortalHooks {
     private static volatile Context portalContext;
     private static volatile ClassLoader portalClassLoader;
     private static volatile ContentObserver settingsObserver;
+    private static volatile String xposedBridgeVersion = "unavailable";
 
     private PortalHooks() {}
 
     static void install(ClassLoader classLoader) {
         try {
             portalClassLoader = classLoader;
+            xposedBridgeVersion = readXposedBridgeVersion();
             Class<?> serviceClass = XposedHelpers.findClass(SERVICE_CLASS, classLoader);
             suppressOriginalFloatWindows(classLoader);
             hookServiceLifecycle(serviceClass, classLoader);
@@ -87,9 +89,14 @@ final class PortalHooks {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 Context context = ((Context) param.thisObject).getApplicationContext();
-                activationReported = reportPortalActivation(context);
                 portalContext = context;
                 portalClassLoader = classLoader;
+                DragShareLog.configure(DragShareSettings.readFromProvider(context));
+                DragShareDiagnostics.captureRuntimeOnce(
+                        context,
+                        "portal service created",
+                        xposedBridgeVersion);
+                activationReported = reportPortalActivation(context);
                 registerSettingsObserver(context);
                 applyPortalRuntime();
                 hookCallbackFromService(param.thisObject);
@@ -244,6 +251,9 @@ final class PortalHooks {
             }
 
             Object motion = properties.get(MOTION_KEY);
+            DragShareLog.d(TAG, "portal callback keys=" + properties.keySet()
+                    + " motion=" + (motion instanceof MotionEvent)
+                    + " control=" + String.valueOf(properties.get(CONTROL_KEY)));
             if (motion instanceof MotionEvent) {
                 dispatchMotion(MotionEvent.obtain((MotionEvent) motion));
                 // A motion-only result is not valid Taplus pick content.
@@ -275,6 +285,9 @@ final class PortalHooks {
     }
 
     private static void dispatchMotion(MotionEvent event) {
+        DragShareLog.d(TAG, "MIUI motion action="
+                + MotionEvent.actionToString(event.getActionMasked())
+                + " point=" + Math.round(event.getRawX()) + "," + Math.round(event.getRawY()));
         if (hasReadyRootSource()) {
             event.recycle();
             if (!rootAuthorityLogged) {
@@ -314,6 +327,10 @@ final class PortalHooks {
             return;
         }
         DragShareSettings settings = DragShareSettings.readFromProvider(context);
+        DragShareLog.configure(settings);
+        DragShareLog.d(TAG, "portal runtime settings captureMode=" + settings.contentCaptureMode
+                + " logLevel=" + settings.logLevel
+                + " logDestination=" + settings.logDestination);
         if (!settings.isPortalCaptureMode()) {
             stopPortalRuntime(true);
             return;
@@ -389,6 +406,9 @@ final class PortalHooks {
     }
 
     private static void dispatchRootPointer(int action, float x, float y, long eventTime) {
+        DragShareLog.d(TAG, "root pointer action=" + MotionEvent.actionToString(action)
+                + " point=" + Math.round(x) + "," + Math.round(y)
+                + " time=" + eventTime);
         DragShareController current = controller;
         if (current != null) {
             current.acceptPointerEvent(
@@ -459,6 +479,16 @@ final class PortalHooks {
         return Boolean.TRUE.equals(REPLAYING_HOST_CALL.get());
     }
 
+    private static String readXposedBridgeVersion() {
+        try {
+            Method method = XposedBridge.class.getMethod("getXposedVersion");
+            Object value = method.invoke(null);
+            return String.valueOf(value);
+        } catch (Throwable error) {
+            return "unavailable:" + error.getClass().getSimpleName();
+        }
+    }
+
     private static final class DeferredHostCall {
         final String kind;
         final Member method;
@@ -474,11 +504,10 @@ final class PortalHooks {
     }
 
     private static void log(String message) {
-        XposedBridge.log(TAG + ": " + message);
+        DragShareLog.i(TAG, message);
     }
 
     private static void log(String message, Throwable error) {
-        XposedBridge.log(TAG + ": " + message);
-        XposedBridge.log(error);
+        DragShareLog.w(TAG, message, error);
     }
 }

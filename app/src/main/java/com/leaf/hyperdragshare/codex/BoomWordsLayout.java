@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.text.TextPaint;
 import android.text.TextUtils;
-import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
@@ -96,7 +95,8 @@ public class BoomWordsLayout {
                     }
                     garbageOffset += removedDiff;
                 } else if (curWordStart < wordIndexStart) {
-                    Log.e(TAG, "Something wrong with rebuild segment curWordStart=" + curWordStart + ", wordIndexStart=" + wordIndexStart);
+                    DragShareLog.e(TAG, "rebuild segment failed curWordStart=" + curWordStart
+                            + ", wordIndexStart=" + wordIndexStart);
                     return false;
                 }
                 newSeg[i] = segment[i] - garbageOffset;
@@ -111,7 +111,8 @@ public class BoomWordsLayout {
                     }
                     garbageOffset += removedDiff;
                 } else if (curPuncStart < wordIndexStart) {
-                    Log.e(TAG, "Something wrong with rebuild segment curPuncStart=" + curPuncStart + ", wordIndexStart=" + wordIndexStart);
+                    DragShareLog.e(TAG, "rebuild segment failed curPuncStart=" + curPuncStart
+                            + ", wordIndexStart=" + wordIndexStart);
                     return false;
                 }
                 wordIndexStart = segment[puncIndexStart + 1] + 1;
@@ -129,7 +130,8 @@ public class BoomWordsLayout {
                         touchIndexOffset += removedDiff;
                     }
                 } else if (curPuncStart < wordIndexStart) {
-                    Log.e(TAG, "Something wrong with add ending punc curPuncStart=" + curPuncStart + ", wordIndexStart=" + wordIndexStart);
+                    DragShareLog.e(TAG, "add ending punctuation failed curPuncStart="
+                            + curPuncStart + ", wordIndexStart=" + wordIndexStart);
                     return false;
                 }
                 wordIndexStart = segment[i + 1] + 1;

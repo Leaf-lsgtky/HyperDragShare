@@ -8,7 +8,6 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 final class MiuiMotionSource {
@@ -60,11 +59,16 @@ final class MiuiMotionSource {
                     if (!firstEventLogged) {
                         firstEventLogged = true;
                         MotionEvent first = (MotionEvent) args[0];
-                        XposedBridge.log(TAG + ": first event action="
+                        DragShareLog.i(TAG, "first event action="
                                 + MotionEvent.actionToString(first.getActionMasked())
                                 + " point=" + Math.round(first.getRawX())
                                 + "," + Math.round(first.getRawY()));
                     }
+                    MotionEvent current = (MotionEvent) args[0];
+                    DragShareLog.d(TAG, "event action="
+                            + MotionEvent.actionToString(current.getActionMasked())
+                            + " point=" + Math.round(current.getRawX())
+                            + "," + Math.round(current.getRawY()));
                     listener.onMotionEvent(MotionEvent.obtain((MotionEvent) args[0]));
                 }
                 return null;
@@ -82,10 +86,9 @@ final class MiuiMotionSource {
             thread = inputThread;
             manager = inputManager;
             motionListener = proxy;
-            XposedBridge.log(TAG + ": fallback listener registered");
+            DragShareLog.i(TAG, "fallback listener registered");
         } catch (Throwable error) {
-            XposedBridge.log(TAG + ": fallback listener unavailable");
-            XposedBridge.log(error);
+            DragShareLog.w(TAG, "fallback listener unavailable", error);
             stop();
         }
     }
@@ -105,7 +108,7 @@ final class MiuiMotionSource {
                         "unregisterMiuiMotionEventListener",
                         listenerObject);
             } catch (Throwable error) {
-                XposedBridge.log(error);
+                DragShareLog.w(TAG, "unable to unregister fallback listener", error);
             }
         }
         if (inputThread != null) {

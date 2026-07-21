@@ -56,6 +56,7 @@ final class DragShareController {
     private static final int PORTAL_MENU_HEIGHT_DP = 152;
     private static final int MENU_TRIGGER_DP = 72;
     private static final int SIMPLE_MENU_ACTIVATION_SLOP_DP = 16;
+    private static final int EDGE_SCROLL_FULL_SPEED_INSET_DP = 8;
     private static final int PORTAL_TRIGGER_FROM_BOTTOM_DP = 96;
     private static final int PORTAL_ITEM_ENTER_OFFSET_DP = 168;
     private static final long MODERN_OVERLAY_EXIT_DURATION_MS = 220L;
@@ -99,17 +100,21 @@ final class DragShareController {
                     ? 16L
                     : Math.min(48L, Math.max(1L, now - lastEdgeScrollUptime));
             lastEdgeScrollUptime = now;
-            int distance = Math.max(
-                    1,
-                    Math.round(dpFloat(settings.scrollSpeedDpPerSecond) * elapsed / 1000f));
-            if (modernMenuView != null) {
-                modernMenuView.scrollByPixels(edgeDirection * distance);
-            } else if (menuScroll != null) {
-                menuScroll.scrollBy(edgeDirection * distance, 0);
-            } else {
-                menuVerticalScroll.scrollBy(0, edgeDirection * distance);
+            float distanceWithRemainder = dpFloat(settings.scrollSpeedDpPerSecond)
+                    * edgeScrollSpeedMultiplier() * elapsed / 1000f
+                    + edgeScrollRemainderPx;
+            int distance = (int) distanceWithRemainder;
+            edgeScrollRemainderPx = distanceWithRemainder - distance;
+            if (distance > 0) {
+                if (modernMenuView != null) {
+                    modernMenuView.scrollByPixels(edgeDirection * distance);
+                } else if (menuScroll != null) {
+                    menuScroll.scrollBy(edgeDirection * distance, 0);
+                } else {
+                    menuVerticalScroll.scrollBy(0, edgeDirection * distance);
+                }
+                updateSelectedTarget(lastX, lastY);
             }
-            updateSelectedTarget(lastX, lastY);
             mainHandler.postDelayed(this, 16L);
         }
     };
@@ -157,6 +162,7 @@ final class DragShareController {
     private boolean portalGlowStartedLogged;
     private boolean portalGlowExpandedLogged;
     private long lastEdgeScrollUptime;
+    private float edgeScrollRemainderPx;
     private int circleEdge = CircleMenuGeometry.EDGE_NONE;
     private int circlePendingEdge = CircleMenuGeometry.EDGE_NONE;
     private int circleScrollDirection;
@@ -324,6 +330,11 @@ final class DragShareController {
             long eventTime,
             String source,
             Runnable beforeFinish) {
+        DragShareLog.d(TAG, "pointer received source=" + source
+                + " action=" + MotionEvent.actionToString(action)
+                + " point=" + Math.round(x) + "," + Math.round(y)
+                + " active=" + active
+                + " time=" + eventTime);
         lastObservedX = x;
         lastObservedY = y;
         lastObservedEventTime = eventTime;
@@ -979,15 +990,16 @@ final class DragShareController {
                     || isPointerInsideSimpleMenu(x, y);
             int nextDirection = 0;
             if (pointerInScrollableMenu) {
-                int edgeAxisSize = isVerticalSimpleMenu() ? screenHeight : screenWidth;
-                int maxEdgeWidth = Math.max(1, (edgeAxisSize - 1) / 2);
-                int edgeWidth = Math.min(dp(settings.edgeTriggerDp), maxEdgeWidth);
-                nextDirection = isVerticalSimpleMenu()
-                        ? GestureMath.edgeScrollDirection(y, screenHeight, edgeWidth)
-                        : GestureMath.edgeScrollDirection(x, screenWidth, edgeWidth);
+                int edgeAxisSize = edgeScrollAxisSize();
+                int edgeWidth = edgeScrollWidthPx();
+                nextDirection = GestureMath.edgeScrollDirection(
+                        isVerticalSimpleMenu() ? y : x,
+                        edgeAxisSize,
+                        edgeWidth);
             }
             if (nextDirection != edgeDirection) {
                 edgeDirection = nextDirection;
+                edgeScrollRemainderPx = 0f;
                 log("edge scroll direction=" + nextDirection);
                 if (nextDirection == 0) {
                     stopEdgeScroll();
@@ -1071,6 +1083,25 @@ final class DragShareController {
         return !isPortalStyle()
                 && (simpleMenuPosition == DragShareSettings.SIMPLE_MENU_POSITION_LEFT
                 || simpleMenuPosition == DragShareSettings.SIMPLE_MENU_POSITION_RIGHT);
+    }
+
+    private int edgeScrollAxisSize() {
+        return isVerticalSimpleMenu() ? screenHeight : screenWidth;
+    }
+
+    private int edgeScrollWidthPx() {
+        int edgeAxisSize = edgeScrollAxisSize();
+        int maxEdgeWidth = Math.max(1, (edgeAxisSize - 1) / 2);
+        return Math.min(dp(settings.edgeTriggerDp), maxEdgeWidth);
+    }
+
+    private float edgeScrollSpeedMultiplier() {
+        boolean vertical = isVerticalSimpleMenu();
+        return GestureMath.edgeScrollSpeedMultiplier(
+                vertical ? lastY : lastX,
+                edgeScrollAxisSize(),
+                edgeScrollWidthPx(),
+                dp(EDGE_SCROLL_FULL_SPEED_INSET_DP));
     }
 
     private boolean shouldShowSimpleMenu(float x, float y) {
@@ -1903,6 +1934,7 @@ final class DragShareController {
         selectedTarget = null;
         menuShown = false;
         edgeDirection = 0;
+        edgeScrollRemainderPx = 0f;
         circleEdge = CircleMenuGeometry.EDGE_NONE;
         circlePendingEdge = CircleMenuGeometry.EDGE_NONE;
         circleScrollDirection = 0;
@@ -2116,6 +2148,7 @@ final class DragShareController {
         edgeDirection = 0;
         circleScrollDirection = 0;
         lastEdgeScrollUptime = 0L;
+        edgeScrollRemainderPx = 0f;
         mainHandler.removeCallbacks(edgeScrollRunnable);
     }
 

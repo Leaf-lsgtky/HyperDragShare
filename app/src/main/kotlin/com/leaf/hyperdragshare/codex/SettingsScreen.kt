@@ -10,6 +10,8 @@ import android.os.Build
 import android.provider.Settings
 import android.view.ViewConfiguration
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -235,6 +237,27 @@ private fun MainPage(
 ) {
     var showAccessibilityDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val exportLogLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain"),
+    ) { destination ->
+        if (destination != null) {
+            coroutineScope.launch {
+                val failure = withContext(Dispatchers.IO) {
+                    try {
+                        DragShareLog.exportTo(context, destination)
+                        null
+                    } catch (error: Throwable) {
+                        error.message ?: error.javaClass.simpleName
+                    }
+                }
+                Toast.makeText(
+                    context,
+                    if (failure == null) "日志已导出" else "导出日志失败：$failure",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
     var edgeTriggerDp by remember(settings.edgeTriggerDp) {
         mutableFloatStateOf(settings.edgeTriggerDp.toFloat())
     }
@@ -719,6 +742,83 @@ private fun MainPage(
                             )
                         },
                     )
+                }
+            }
+
+            item(key = "logging-title") {
+                SmallTitle(text = "日志")
+            }
+            item(key = "logging-preferences") {
+                Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    OverlayDropdownPreference(
+                        title = "日志输出等级",
+                        summary = when (settings.logLevel) {
+                            DragShareSettings.LOG_LEVEL_DISABLED -> "不输出模块日志"
+                            DragShareSettings.LOG_LEVEL_DEBUG -> "记录运行环境与输入诊断步骤"
+                            else -> "记录当前常规运行信息"
+                        },
+                        items = listOf("禁用", "信息（当前）", "调试"),
+                        selectedIndex = settings.logLevel.coerceIn(
+                            DragShareSettings.LOG_LEVEL_DISABLED,
+                            DragShareSettings.LOG_LEVEL_DEBUG,
+                        ),
+                        onSelectedIndexChange = { selected ->
+                            val next = copySettings(settings, logLevel = selected)
+                            persist(next)
+                            DragShareDiagnostics.captureRuntimeOnce(
+                                context,
+                                "logging level changed",
+                                null,
+                            )
+                            DragShareDiagnostics.captureInputInventory(
+                                context,
+                                "logging level changed",
+                                null,
+                                null,
+                            )
+                        },
+                    )
+                    OverlayDropdownPreference(
+                        title = "日志保存位置",
+                        summary = if (settings.logDestination
+                            == DragShareSettings.LOG_DESTINATION_FILE
+                        ) {
+                            "存储到 ${DragShareLog.LOG_DIRECTORY}"
+                        } else {
+                            "写入系统日志（Logcat）"
+                        },
+                        items = listOf("系统日志（当前）", "文件"),
+                        selectedIndex = settings.logDestination.coerceIn(
+                            DragShareSettings.LOG_DESTINATION_SYSTEM,
+                            DragShareSettings.LOG_DESTINATION_FILE,
+                        ),
+                        onSelectedIndexChange = { selected ->
+                            val next = copySettings(settings, logDestination = selected)
+                            persist(next)
+                            DragShareDiagnostics.captureRuntimeOnce(
+                                context,
+                                "logging destination changed",
+                                null,
+                            )
+                            DragShareDiagnostics.captureInputInventory(
+                                context,
+                                "logging destination changed",
+                                null,
+                                null,
+                            )
+                        },
+                    )
+                    AnimatedVisibility(
+                        visible = settings.logDestination == DragShareSettings.LOG_DESTINATION_FILE,
+                    ) {
+                        ArrowPreference(
+                            title = "导出日志",
+                            summary = "将当前日志保存到所选位置",
+                            onClick = {
+                                exportLogLauncher.launch(DragShareLog.exportFileName())
+                            },
+                        )
+                    }
                 }
             }
 
@@ -1849,6 +1949,8 @@ private fun copySettings(
     accessibilityLongPressTimeoutMillis: Int = current.accessibilityLongPressTimeoutMillis,
     accessibilityRecognitionSensitivityPercent: Int =
         current.accessibilityRecognitionSensitivityPercent,
+    logLevel: Int = current.logLevel,
+    logDestination: Int = current.logDestination,
 ): DragShareSettings = DragShareSettings(
     colorMode,
     uiStyle,
@@ -1873,6 +1975,8 @@ private fun copySettings(
     preloadTextSegmenter,
     modernBlurRadiusDp,
     modernGlassOpacityPercent,
+    logLevel,
+    logDestination,
 )
 
 @Suppress("DEPRECATION")

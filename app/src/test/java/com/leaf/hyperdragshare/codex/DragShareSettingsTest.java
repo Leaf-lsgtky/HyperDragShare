@@ -20,14 +20,18 @@ import java.util.List;
 @Config(manifest = Config.NONE)
 public final class DragShareSettingsTest {
     @Test
-    public void defaultsKeepExistingLightBehavior() {
+    public void defaultsUseModernStyleAndFullIconOpacity() {
         DragShareSettings settings = DragShareSettings.defaults();
 
         assertEquals(DragShareSettings.COLOR_LIGHT, settings.colorMode);
         assertEquals(
                 DragShareSettings.CONTENT_CAPTURE_PORTAL,
                 settings.contentCaptureMode);
-        assertEquals(DragShareSettings.STYLE_SIMPLE, settings.uiStyle);
+        assertEquals(DragShareSettings.STYLE_MODERN, settings.uiStyle);
+        assertEquals(DragShareSettings.STYLE_MODERN, DragShareSettings.DEFAULT_UI_STYLE);
+        assertEquals(
+                DragShareSettings.STYLE_MODERN,
+                DragShareSettings.fromBundle(new Bundle()).uiStyle);
         assertEquals(DragShareSettings.DEFAULT_EDGE_TRIGGER_DP, settings.edgeTriggerDp);
         assertEquals(
                 DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
@@ -59,6 +63,8 @@ public final class DragShareSettingsTest {
         assertEquals(
                 DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT,
                 settings.iconOpacityPercent);
+        assertEquals(100, DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT);
+        assertEquals(100, settings.iconOpacityPercent);
         assertEquals(
                 DragShareSettings.DEFAULT_MODERN_BLUR_RADIUS_DP,
                 settings.modernBlurRadiusDp);
@@ -76,12 +82,77 @@ public final class DragShareSettingsTest {
         assertEquals(
                 DragShareSettings.DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
                 settings.accessibilityRecognitionSensitivityPercent);
+        assertEquals(DragShareSettings.LOG_LEVEL_INFO, settings.logLevel);
+        assertEquals(DragShareSettings.LOG_DESTINATION_SYSTEM, settings.logDestination);
         assertEquals(650, settings.resolveAccessibilityLongPressTimeoutMillis(650));
         assertEquals(1f, settings.accessibilityTouchSlopMultiplier(), 0f);
         assertFalse(settings.isAccessibilityRecognitionEnabledForOrientation(
                 Configuration.ORIENTATION_LANDSCAPE));
         assertTrue(settings.isAccessibilityRecognitionEnabledForOrientation(
                 Configuration.ORIENTATION_PORTRAIT));
+    }
+
+    @Test
+    public void diagnosticLoggingSettingsAreClampedAndRoundTripThroughProviderBundle() {
+        DragShareSettings settings = new DragShareSettings(
+                DragShareSettings.COLOR_LIGHT,
+                DragShareSettings.STYLE_SIMPLE,
+                DragShareSettings.DEFAULT_EDGE_TRIGGER_DP,
+                DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
+                false,
+                true,
+                true,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_POSITION,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_OPACITY_PERCENT,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_CORNER_RADIUS_DP,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_EDGE_DISTANCE_DP,
+                DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT,
+                true,
+                new LinkedHashSet<>(),
+                Arrays.asList(),
+                DragShareSettings.CONTENT_CAPTURE_PORTAL,
+                false,
+                new LinkedHashSet<>(),
+                DragShareSettings.DEFAULT_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS,
+                DragShareSettings.DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
+                true,
+                DragShareSettings.DEFAULT_MODERN_BLUR_RADIUS_DP,
+                DragShareSettings.DEFAULT_MODERN_GLASS_OPACITY_PERCENT,
+                DragShareSettings.LOG_LEVEL_DEBUG,
+                DragShareSettings.LOG_DESTINATION_FILE);
+
+        DragShareSettings roundTripped = DragShareSettings.fromBundle(settings.toBundle());
+        assertEquals(DragShareSettings.LOG_LEVEL_DEBUG, roundTripped.logLevel);
+        assertEquals(DragShareSettings.LOG_DESTINATION_FILE, roundTripped.logDestination);
+
+        DragShareSettings invalid = new DragShareSettings(
+                DragShareSettings.COLOR_LIGHT,
+                DragShareSettings.STYLE_SIMPLE,
+                DragShareSettings.DEFAULT_EDGE_TRIGGER_DP,
+                DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
+                false,
+                true,
+                true,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_POSITION,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_OPACITY_PERCENT,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_CORNER_RADIUS_DP,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_EDGE_DISTANCE_DP,
+                DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT,
+                true,
+                new LinkedHashSet<>(),
+                Arrays.asList(),
+                DragShareSettings.CONTENT_CAPTURE_PORTAL,
+                false,
+                new LinkedHashSet<>(),
+                DragShareSettings.DEFAULT_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS,
+                DragShareSettings.DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
+                true,
+                DragShareSettings.DEFAULT_MODERN_BLUR_RADIUS_DP,
+                DragShareSettings.DEFAULT_MODERN_GLASS_OPACITY_PERCENT,
+                99,
+                99);
+        assertEquals(DragShareSettings.LOG_LEVEL_INFO, invalid.logLevel);
+        assertEquals(DragShareSettings.LOG_DESTINATION_SYSTEM, invalid.logDestination);
     }
 
     @Test
@@ -92,7 +163,7 @@ public final class DragShareSettingsTest {
                 Integer.MAX_VALUE);
 
         assertEquals(DragShareSettings.COLOR_LIGHT, settings.colorMode);
-        assertEquals(DragShareSettings.STYLE_SIMPLE, settings.uiStyle);
+        assertEquals(DragShareSettings.DEFAULT_UI_STYLE, settings.uiStyle);
         assertEquals(DragShareSettings.MIN_EDGE_TRIGGER_DP, settings.edgeTriggerDp);
         assertEquals(
                 DragShareSettings.MAX_SCROLL_SPEED_DP_PER_SECOND,
