@@ -11,9 +11,12 @@ import java.util.concurrent.TimeUnit;
 final class ModuleActivation {
     static final String METHOD_REPORT_INJECTED = "report_injected";
     static final String EXTRA_VERSION_CODE = "version_code";
+    static final String EXTRA_PORTAL_ROOT_GRANTED = "portal_root_granted";
 
     private static final String PREFS_NAME = "module_activation";
     private static final String KEY_INJECTED_VERSION = "injected_version";
+    private static final String KEY_PORTAL_ROOT_VERSION = "portal_root_version";
+    private static final String KEY_PORTAL_ROOT_GRANTED = "portal_root_granted";
     private static final long ROOT_TIMEOUT_SECONDS = 4L;
     private static final String PORTAL_SERVICE_COMMAND =
             "am startservice --user current "
@@ -23,15 +26,52 @@ final class ModuleActivation {
     private static final String PORTAL_BLACKLIST_ACTIVITY_COMMAND =
             "am start --user current -n com.miui.contentextension/"
                     + "com.miui.contentextension.setting.whitelist.BlacklistSettingActivity";
+    private static boolean portalRootProbeInFlight;
 
     private ModuleActivation() {}
 
     static boolean reportInjected(Context portalContext) {
+        Bundle extras = new Bundle();
+        extras.putLong(EXTRA_VERSION_CODE, BuildConfig.VERSION_CODE);
+        return reportPortalStatus(portalContext, extras);
+    }
+
+    /** Runs in the injected portal process so the root manager evaluates the portal UID. */
+    static void probePortalRootAccessAsync(Context portalContext) {
+        if (portalContext == null) {
+            return;
+        }
+        final Context reportContext = portalContext.getApplicationContext() == null
+                ? portalContext
+                : portalContext.getApplicationContext();
+        synchronized (ModuleActivation.class) {
+            if (portalRootProbeInFlight) {
+                return;
+            }
+            portalRootProbeInFlight = true;
+        }
+        new Thread(() -> {
+            try {
+                reportPortalRootAccess(reportContext, hasRootAccess());
+            } finally {
+                synchronized (ModuleActivation.class) {
+                    portalRootProbeInFlight = false;
+                }
+            }
+        }, "DragShare-PortalRootCheck").start();
+    }
+
+    private static boolean reportPortalRootAccess(Context portalContext, boolean rootGranted) {
+        Bundle extras = new Bundle();
+        extras.putLong(EXTRA_VERSION_CODE, BuildConfig.VERSION_CODE);
+        extras.putBoolean(EXTRA_PORTAL_ROOT_GRANTED, rootGranted);
+        return reportPortalStatus(portalContext, extras);
+    }
+
+    private static boolean reportPortalStatus(Context portalContext, Bundle extras) {
         if (portalContext == null) {
             return false;
         }
-        Bundle extras = new Bundle();
-        extras.putLong(EXTRA_VERSION_CODE, BuildConfig.VERSION_CODE);
         try {
             portalContext.getContentResolver().call(
                     ImageStagingClient.BASE_URI,
@@ -51,10 +91,17 @@ final class ModuleActivation {
         if (!matchesCurrentBuild(reportedVersion)) {
             return;
         }
-        moduleContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SharedPreferences.Editor editor = moduleContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
-                .putLong(KEY_INJECTED_VERSION, reportedVersion)
-                .apply();
+                .putLong(KEY_INJECTED_VERSION, reportedVersion);
+        if (extras != null && extras.containsKey(EXTRA_PORTAL_ROOT_GRANTED)) {
+            editor.putLong(KEY_PORTAL_ROOT_VERSION, reportedVersion)
+                    .putBoolean(
+                            KEY_PORTAL_ROOT_GRANTED,
+                            extras.getBoolean(EXTRA_PORTAL_ROOT_GRANTED));
+        }
+        editor.apply();
     }
 
     static boolean isCurrentBuildInjected(Context context) {
@@ -65,6 +112,17 @@ final class ModuleActivation {
                 PREFS_NAME,
                 Context.MODE_PRIVATE);
         return matchesCurrentBuild(preferences.getLong(KEY_INJECTED_VERSION, -1L));
+    }
+
+    static boolean isCurrentBuildPortalRootGranted(Context context) {
+        if (context == null) {
+            return false;
+        }
+        SharedPreferences preferences = context.getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE);
+        return matchesCurrentBuild(preferences.getLong(KEY_PORTAL_ROOT_VERSION, -1L))
+                && preferences.getBoolean(KEY_PORTAL_ROOT_GRANTED, false);
     }
 
     static boolean hasRootAccess() {

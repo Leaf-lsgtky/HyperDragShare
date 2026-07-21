@@ -55,6 +55,7 @@ final class DragShareController {
     private static final int SIMPLE_SIDE_MENU_WIDTH_DP = 112;
     private static final int PORTAL_MENU_HEIGHT_DP = 152;
     private static final int MENU_TRIGGER_DP = 72;
+    private static final int SIMPLE_MENU_ACTIVATION_SLOP_DP = 16;
     private static final int PORTAL_TRIGGER_FROM_BOTTOM_DP = 96;
     private static final int PORTAL_ITEM_ENTER_OFFSET_DP = 168;
     private static final long MODERN_OVERLAY_EXIT_DURATION_MS = 220L;
@@ -143,6 +144,10 @@ final class DragShareController {
 
     private float lastX;
     private float lastY;
+    private float simpleMenuStartX;
+    private float simpleMenuStartY;
+    private boolean simpleMenuStartPointCaptured;
+    private boolean simpleMenuActivationQualified;
     private long lastHandledEventTime = Long.MIN_VALUE;
     private int lastHandledAction = -1;
     private int edgeDirection;
@@ -405,6 +410,8 @@ final class DragShareController {
         backgroundBlockAttempted = false;
         portalGlowStartedLogged = false;
         portalGlowExpandedLogged = false;
+        simpleMenuStartPointCaptured = false;
+        simpleMenuActivationQualified = false;
         lastHandledEventTime = Long.MIN_VALUE;
         lastHandledAction = -1;
         settings = loadedSettings == null ? DragShareSettings.defaults() : loadedSettings;
@@ -450,6 +457,10 @@ final class DragShareController {
             return;
         }
 
+        boolean hasRequestedInitialPoint = Float.isFinite(requestedInitialX)
+                && requestedInitialX >= 0f
+                && Float.isFinite(requestedInitialY)
+                && requestedInitialY >= 0f;
         float initialX = Float.isFinite(requestedInitialX) && requestedInitialX >= 0f
                 ? requestedInitialX
                 : screenWidth / 2f;
@@ -458,6 +469,9 @@ final class DragShareController {
                 : Math.max(topInset + dp(80), screenHeight * 0.32f);
         lastX = initialX;
         lastY = initialY;
+        simpleMenuStartX = initialX;
+        simpleMenuStartY = initialY;
+        simpleMenuStartPointCaptured = hasRequestedInitialPoint;
         updatePreviewPosition(initialX, initialY);
         updatePortalPullEffect(initialX, initialY);
         startPreviewEnterAnimation();
@@ -948,7 +962,8 @@ final class DragShareController {
             return;
         }
         boolean menuOpenedNow = false;
-        if (!menuShown && shouldShowSimpleMenu(x, y)) {
+        if (!menuShown && shouldShowSimpleMenu(x, y)
+                && hasQualifiedSimpleMenuActivation(x, y)) {
             showMenuOnMain();
             menuOpenedNow = menuShown;
         }
@@ -1074,6 +1089,26 @@ final class DragShareController {
             default:
                 return y >= menuTriggerTop;
         }
+    }
+
+    private boolean hasQualifiedSimpleMenuActivation(float x, float y) {
+        if (isPortalStyle() || isCircleStyle() || simpleMenuActivationQualified) {
+            return true;
+        }
+        if (!simpleMenuStartPointCaptured) {
+            simpleMenuStartX = x;
+            simpleMenuStartY = y;
+            simpleMenuStartPointCaptured = true;
+            return false;
+        }
+        simpleMenuActivationQualified = GestureMath.hasMovedTowardMenu(
+                simpleMenuPosition,
+                simpleMenuStartX,
+                simpleMenuStartY,
+                x,
+                y,
+                dp(SIMPLE_MENU_ACTIVATION_SLOP_DP));
+        return simpleMenuActivationQualified;
     }
 
     private boolean isPointerInsideSimpleMenu(float x, float y) {

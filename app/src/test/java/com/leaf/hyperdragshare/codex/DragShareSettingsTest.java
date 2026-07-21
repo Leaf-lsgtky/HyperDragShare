@@ -41,12 +41,8 @@ public final class DragShareSettingsTest {
         assertEquals(
                 DragShareSettings.DEFAULT_IMAGE_SHARING_ENABLED,
                 settings.imageSharingEnabled);
-        assertEquals(
-                DragShareSettings.DEFAULT_TEXT_COPY_ENABLED,
-                settings.textCopyEnabled);
-        assertEquals(
-                DragShareSettings.DEFAULT_IMAGE_COPY_ENABLED,
-                settings.imageCopyEnabled);
+        assertTrue(settings.isTargetVisible(DragShareSettings.TARGET_COPY_TEXT));
+        assertTrue(settings.isTargetVisible(DragShareSettings.TARGET_COPY_IMAGE));
         assertTrue(settings.preloadTextSegmenter);
         assertEquals(
                 DragShareSettings.DEFAULT_SIMPLE_MENU_POSITION,
@@ -156,8 +152,6 @@ public final class DragShareSettingsTest {
                 new LinkedHashSet<>(),
                 DragShareSettings.DEFAULT_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS,
                 DragShareSettings.DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
-                true,
-                true,
                 true,
                 Integer.MAX_VALUE,
                 Integer.MIN_VALUE);
@@ -320,10 +314,10 @@ public final class DragShareSettingsTest {
                 true);
 
         assertEquals(2, textTargets.size());
-        assertTrue(textTargets.get(0).isCopyToClipboard());
+        assertTrue(textTargets.get(0).isCopyTextToClipboard());
         assertTrue(textTargets.get(1).isTextSegmentation());
         assertEquals(2, imageTargets.size());
-        assertTrue(imageTargets.get(0).isCopyToClipboard());
+        assertTrue(imageTargets.get(0).isCopyImageToClipboard());
         assertTrue(imageTargets.get(1).isSaveToLocal());
     }
 
@@ -373,7 +367,7 @@ public final class DragShareSettingsTest {
     }
 
     @Test
-    public void tokenizerAndCopyPreferencesRoundTripAndOldBundlesDefaultToEnabled() {
+    public void legacyCopyPreferencesMigrateToSeparateVisibleTargets() {
         DragShareSettings settings = new DragShareSettings(
                 DragShareSettings.COLOR_LIGHT,
                 DragShareSettings.STYLE_SIMPLE,
@@ -400,10 +394,8 @@ public final class DragShareSettingsTest {
                 true);
 
         assertFalse(settings.preloadTextSegmenter);
-        assertFalse(settings.textCopyEnabled);
-        assertTrue(settings.imageCopyEnabled);
-        assertFalse(settings.isCopyEnabled(false));
-        assertTrue(settings.isCopyEnabled(true));
+        assertFalse(settings.isTargetVisible(DragShareSettings.TARGET_COPY_TEXT));
+        assertTrue(settings.isTargetVisible(DragShareSettings.TARGET_COPY_IMAGE));
         List<ShareTarget> textTargets = ShareTargetRepository.applySettings(
                 null,
                 java.util.Collections.emptyList(),
@@ -417,14 +409,31 @@ public final class DragShareSettingsTest {
         assertEquals(1, textTargets.size());
         assertTrue(textTargets.get(0).isTextSegmentation());
         assertEquals(2, imageTargets.size());
-        assertTrue(imageTargets.get(0).isCopyToClipboard());
+        assertTrue(imageTargets.get(0).isCopyImageToClipboard());
         assertTrue(imageTargets.get(1).isSaveToLocal());
         assertFalse(DragShareSettings.fromBundle(settings.toBundle()).preloadTextSegmenter);
-        assertFalse(DragShareSettings.fromBundle(settings.toBundle()).textCopyEnabled);
-        assertTrue(DragShareSettings.fromBundle(settings.toBundle()).imageCopyEnabled);
+        assertFalse(DragShareSettings.fromBundle(settings.toBundle())
+                .isTargetVisible(DragShareSettings.TARGET_COPY_TEXT));
+        assertTrue(DragShareSettings.fromBundle(settings.toBundle())
+                .isTargetVisible(DragShareSettings.TARGET_COPY_IMAGE));
         assertTrue(DragShareSettings.fromBundle(new Bundle()).preloadTextSegmenter);
-        assertTrue(DragShareSettings.fromBundle(new Bundle()).textCopyEnabled);
-        assertTrue(DragShareSettings.fromBundle(new Bundle()).imageCopyEnabled);
+        assertTrue(DragShareSettings.fromBundle(new Bundle())
+                .isTargetVisible(DragShareSettings.TARGET_COPY_TEXT));
+        assertTrue(DragShareSettings.fromBundle(new Bundle())
+                .isTargetVisible(DragShareSettings.TARGET_COPY_IMAGE));
+
+        DragShareSettings sharedCopyHidden = new DragShareSettings(
+                DragShareSettings.COLOR_LIGHT,
+                DragShareSettings.STYLE_SIMPLE,
+                DragShareSettings.DEFAULT_EDGE_TRIGGER_DP,
+                DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
+                false,
+                true,
+                true,
+                new LinkedHashSet<>(Arrays.asList(DragShareSettings.TARGET_COPY)),
+                Arrays.asList());
+        assertFalse(sharedCopyHidden.isTargetVisible(DragShareSettings.TARGET_COPY_TEXT));
+        assertFalse(sharedCopyHidden.isTargetVisible(DragShareSettings.TARGET_COPY_IMAGE));
     }
 
     @Test

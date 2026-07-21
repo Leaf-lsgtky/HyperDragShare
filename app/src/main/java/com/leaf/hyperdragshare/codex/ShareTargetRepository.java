@@ -85,7 +85,7 @@ final class ShareTargetRepository {
 
     /**
      * Applies visibility and the user-defined order to a runtime menu. Built-in actions are
-     * deliberately inserted before package targets; copy is available for both payload types.
+     * deliberately inserted before package targets; each payload type has its own copy action.
      */
     static List<ShareTarget> applySettings(
             Context context,
@@ -96,11 +96,13 @@ final class ShareTargetRepository {
                 ? DragShareSettings.defaults()
                 : settings;
         Map<String, ShareTarget> visible = new LinkedHashMap<>();
-        if (effective.isCopyEnabled(imagePayload)
-                && effective.isTargetVisible(DragShareSettings.TARGET_COPY)) {
-            visible.put(
-                    DragShareSettings.TARGET_COPY,
-                    ShareTarget.copyToClipboard(loadCopyIcon(context)));
+        String copyKey = imagePayload
+                ? DragShareSettings.TARGET_COPY_IMAGE
+                : DragShareSettings.TARGET_COPY_TEXT;
+        if (effective.isTargetVisible(copyKey)) {
+            visible.put(copyKey, imagePayload
+                    ? ShareTarget.copyImageToClipboard(loadCopyIcon(context))
+                    : ShareTarget.copyTextToClipboard(loadCopyIcon(context)));
         }
         if (imagePayload && effective.isTargetVisible(DragShareSettings.TARGET_SAVE_LOCAL)) {
             visible.put(
@@ -123,7 +125,7 @@ final class ShareTargetRepository {
         }
 
         List<ShareTarget> result = new ArrayList<>();
-        ShareTarget copy = visible.remove(DragShareSettings.TARGET_COPY);
+        ShareTarget copy = visible.remove(copyKey);
         if (copy != null) {
             result.add(copy);
         }

@@ -87,7 +87,7 @@ final class PortalHooks {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 Context context = ((Context) param.thisObject).getApplicationContext();
-                activationReported = ModuleActivation.reportInjected(context);
+                activationReported = reportPortalActivation(context);
                 portalContext = context;
                 portalClassLoader = classLoader;
                 registerSettingsObserver(context);
@@ -115,7 +115,7 @@ final class PortalHooks {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         Context context = ((Context) param.thisObject).getApplicationContext();
-                        activationReported = ModuleActivation.reportInjected(context)
+                        activationReported = reportPortalActivation(context)
                                 || activationReported;
                     }
                 });
@@ -151,7 +151,7 @@ final class PortalHooks {
             protected void beforeHookedMethod(MethodHookParam param) {
                 if (!activationReported) {
                     Context context = ((Context) param.thisObject).getApplicationContext();
-                    activationReported = ModuleActivation.reportInjected(context);
+                    activationReported = reportPortalActivation(context);
                 }
                 Context context = ((Context) param.thisObject).getApplicationContext();
                 DragShareSettings settings = DragShareSettings.readFromProvider(context);
@@ -297,6 +297,14 @@ final class PortalHooks {
     private static boolean hasReadyRootSource() {
         RootTouchSource source = rootTouchSource;
         return source != null && source.isReady();
+    }
+
+    private static boolean reportPortalActivation(Context context) {
+        boolean reported = ModuleActivation.reportInjected(context);
+        if (reported) {
+            ModuleActivation.probePortalRootAccessAsync(context);
+        }
+        return reported;
     }
 
     private static synchronized void applyPortalRuntime() {

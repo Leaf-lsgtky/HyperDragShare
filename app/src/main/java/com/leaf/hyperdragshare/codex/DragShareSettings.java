@@ -79,8 +79,6 @@ public final class DragShareSettings {
     public static final boolean DEFAULT_BLOCK_BACKGROUND_SCROLL = false;
     public static final boolean DEFAULT_TEXT_SHARING_ENABLED = true;
     public static final boolean DEFAULT_IMAGE_SHARING_ENABLED = true;
-    public static final boolean DEFAULT_TEXT_COPY_ENABLED = true;
-    public static final boolean DEFAULT_IMAGE_COPY_ENABLED = true;
     public static final boolean DEFAULT_PRELOAD_TEXT_SEGMENTER = true;
     public static final boolean DEFAULT_CLOSE_MENU_WHEN_POINTER_LEAVES = true;
     public static final boolean DEFAULT_ACCESSIBILITY_LANDSCAPE_RECOGNITION_ENABLED = false;
@@ -92,8 +90,12 @@ public final class DragShareSettings {
     public static final int DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT = 100;
     public static final int MAX_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT = 200;
 
-    /** Stable key for the built-in copy action. It is kept ahead of app targets. */
-    public static final String TARGET_COPY = "builtin:copy";
+    /** Stable key for the built-in text copy action. It is kept ahead of app targets. */
+    public static final String TARGET_COPY_TEXT = "builtin:copy_text";
+    /** Stable key for the built-in image copy action. It is kept ahead of app targets. */
+    public static final String TARGET_COPY_IMAGE = "builtin:copy_image";
+    /** Legacy key used by versions that exposed one shared copy action. */
+    static final String TARGET_COPY = "builtin:copy";
     /** Stable key for the built-in image action. It is kept ahead of app targets. */
     public static final String TARGET_SAVE_LOCAL = "builtin:save_local";
     /** Stable key for the built-in text action. It is kept ahead of app targets. */
@@ -140,8 +142,6 @@ public final class DragShareSettings {
     public final boolean blockBackgroundScroll;
     public final boolean textSharingEnabled;
     public final boolean imageSharingEnabled;
-    public final boolean textCopyEnabled;
-    public final boolean imageCopyEnabled;
     public final boolean preloadTextSegmenter;
     public final int simpleMenuPosition;
     public final int simpleMenuOpacityPercent;
@@ -471,11 +471,14 @@ public final class DragShareSettings {
                 accessibilityLongPressTimeoutMillis,
                 accessibilityRecognitionSensitivityPercent,
                 preloadTextSegmenter,
-                DEFAULT_TEXT_COPY_ENABLED,
-                DEFAULT_IMAGE_COPY_ENABLED);
+                DEFAULT_MODERN_BLUR_RADIUS_DP,
+                DEFAULT_MODERN_GLASS_OPACITY_PERCENT);
     }
 
-    /** Full constructor including per-payload copy controls. */
+    /**
+     * Compatibility constructor for the per-payload copy switches used before copy actions
+     * became independently visible menu targets.
+     */
     public DragShareSettings(
             int colorMode,
             int uiStyle,
@@ -514,7 +517,10 @@ public final class DragShareSettings {
                 simpleMenuEdgeDistanceDp,
                 iconOpacityPercent,
                 closeMenuWhenPointerLeaves,
-                hiddenTargetKeys,
+                migrateLegacyCopyTargetVisibility(
+                        hiddenTargetKeys,
+                        textCopyEnabled,
+                        imageCopyEnabled),
                 targetOrder,
                 contentCaptureMode,
                 accessibilityLandscapeRecognitionEnabled,
@@ -522,8 +528,6 @@ public final class DragShareSettings {
                 accessibilityLongPressTimeoutMillis,
                 accessibilityRecognitionSensitivityPercent,
                 preloadTextSegmenter,
-                textCopyEnabled,
-                imageCopyEnabled,
                 DEFAULT_MODERN_BLUR_RADIUS_DP,
                 DEFAULT_MODERN_GLASS_OPACITY_PERCENT);
     }
@@ -551,8 +555,6 @@ public final class DragShareSettings {
             int accessibilityLongPressTimeoutMillis,
             int accessibilityRecognitionSensitivityPercent,
             boolean preloadTextSegmenter,
-            boolean textCopyEnabled,
-            boolean imageCopyEnabled,
             int modernBlurRadiusDp,
             int modernGlassOpacityPercent) {
         this.colorMode = colorMode == COLOR_DARK ? COLOR_DARK : COLOR_LIGHT;
@@ -573,8 +575,6 @@ public final class DragShareSettings {
         this.blockBackgroundScroll = blockBackgroundScroll;
         this.textSharingEnabled = textSharingEnabled;
         this.imageSharingEnabled = imageSharingEnabled;
-        this.textCopyEnabled = textCopyEnabled;
-        this.imageCopyEnabled = imageCopyEnabled;
         this.preloadTextSegmenter = preloadTextSegmenter;
         this.simpleMenuPosition = normalizeSimpleMenuPosition(simpleMenuPosition);
         this.simpleMenuOpacityPercent = clamp(
@@ -602,7 +602,7 @@ public final class DragShareSettings {
                 MIN_MODERN_GLASS_OPACITY_PERCENT,
                 MAX_MODERN_GLASS_OPACITY_PERCENT);
         this.closeMenuWhenPointerLeaves = closeMenuWhenPointerLeaves;
-        this.hiddenTargetKeys = immutableKeys(hiddenTargetKeys);
+        this.hiddenTargetKeys = immutableKeys(normalizeHiddenTargetKeys(hiddenTargetKeys));
         this.targetOrder = immutableKeysAsList(targetOrder);
         this.accessibilityLandscapeRecognitionEnabled =
                 accessibilityLandscapeRecognitionEnabled;
@@ -642,6 +642,10 @@ public final class DragShareSettings {
         SharedPreferences preferences = context.getSharedPreferences(
                 PREFS_NAME,
                 Context.MODE_PRIVATE);
+        Set<String> hiddenTargetKeys = migrateLegacyCopyTargetVisibility(
+                preferences.getStringSet(KEY_HIDDEN_TARGETS, Collections.emptySet()),
+                preferences.getBoolean(KEY_TEXT_COPY_ENABLED, true),
+                preferences.getBoolean(KEY_IMAGE_COPY_ENABLED, true));
         return new DragShareSettings(
                 preferences.getInt(KEY_COLOR_MODE, COLOR_LIGHT),
                 preferences.getInt(KEY_UI_STYLE, STYLE_SIMPLE),
@@ -676,7 +680,7 @@ public final class DragShareSettings {
                 preferences.getBoolean(
                         KEY_CLOSE_MENU_WHEN_POINTER_LEAVES,
                         DEFAULT_CLOSE_MENU_WHEN_POINTER_LEAVES),
-                preferences.getStringSet(KEY_HIDDEN_TARGETS, Collections.emptySet()),
+                hiddenTargetKeys,
                 parseKeys(preferences.getString(KEY_TARGET_ORDER, "")),
                 preferences.getInt(
                         KEY_CONTENT_CAPTURE_MODE,
@@ -696,12 +700,6 @@ public final class DragShareSettings {
                 preferences.getBoolean(
                         KEY_PRELOAD_TEXT_SEGMENTER,
                         DEFAULT_PRELOAD_TEXT_SEGMENTER),
-                preferences.getBoolean(
-                        KEY_TEXT_COPY_ENABLED,
-                        DEFAULT_TEXT_COPY_ENABLED),
-                preferences.getBoolean(
-                        KEY_IMAGE_COPY_ENABLED,
-                        DEFAULT_IMAGE_COPY_ENABLED),
                 preferences.getInt(
                         KEY_MODERN_BLUR_RADIUS,
                         DEFAULT_MODERN_BLUR_RADIUS_DP),
@@ -724,8 +722,8 @@ public final class DragShareSettings {
                 .putBoolean(KEY_BLOCK_BACKGROUND_SCROLL, blockBackgroundScroll)
                 .putBoolean(KEY_TEXT_SHARING_ENABLED, textSharingEnabled)
                 .putBoolean(KEY_IMAGE_SHARING_ENABLED, imageSharingEnabled)
-                .putBoolean(KEY_TEXT_COPY_ENABLED, textCopyEnabled)
-                .putBoolean(KEY_IMAGE_COPY_ENABLED, imageCopyEnabled)
+                .remove(KEY_TEXT_COPY_ENABLED)
+                .remove(KEY_IMAGE_COPY_ENABLED)
                 .putBoolean(KEY_PRELOAD_TEXT_SEGMENTER, preloadTextSegmenter)
                 .putInt(KEY_SIMPLE_MENU_POSITION, simpleMenuPosition)
                 .putInt(KEY_SIMPLE_MENU_OPACITY, simpleMenuOpacityPercent)
@@ -781,8 +779,13 @@ public final class DragShareSettings {
         result.putBoolean(KEY_BLOCK_BACKGROUND_SCROLL, blockBackgroundScroll);
         result.putBoolean(KEY_TEXT_SHARING_ENABLED, textSharingEnabled);
         result.putBoolean(KEY_IMAGE_SHARING_ENABLED, imageSharingEnabled);
-        result.putBoolean(KEY_TEXT_COPY_ENABLED, textCopyEnabled);
-        result.putBoolean(KEY_IMAGE_COPY_ENABLED, imageCopyEnabled);
+        // Keep an older injected process aligned until it reloads this module version.
+        result.putBoolean(
+                KEY_TEXT_COPY_ENABLED,
+                isTargetVisible(TARGET_COPY_TEXT));
+        result.putBoolean(
+                KEY_IMAGE_COPY_ENABLED,
+                isTargetVisible(TARGET_COPY_IMAGE));
         result.putBoolean(KEY_PRELOAD_TEXT_SEGMENTER, preloadTextSegmenter);
         result.putInt(KEY_SIMPLE_MENU_POSITION, simpleMenuPosition);
         result.putInt(KEY_SIMPLE_MENU_OPACITY, simpleMenuOpacityPercent);
@@ -817,6 +820,12 @@ public final class DragShareSettings {
         ArrayList<String> orderValues = bundle.getStringArrayList(KEY_TARGET_ORDER);
         ArrayList<String> accessibilityBlacklistValues = bundle.getStringArrayList(
                 KEY_ACCESSIBILITY_BLACKLISTED_PACKAGES);
+        Set<String> hiddenTargetKeys = migrateLegacyCopyTargetVisibility(
+                hiddenValues == null
+                        ? Collections.emptySet()
+                        : new LinkedHashSet<>(hiddenValues),
+                bundle.getBoolean(KEY_TEXT_COPY_ENABLED, true),
+                bundle.getBoolean(KEY_IMAGE_COPY_ENABLED, true));
         return new DragShareSettings(
                 bundle.getInt(KEY_COLOR_MODE, COLOR_LIGHT),
                 bundle.getInt(KEY_UI_STYLE, STYLE_SIMPLE),
@@ -851,9 +860,7 @@ public final class DragShareSettings {
                 bundle.getBoolean(
                         KEY_CLOSE_MENU_WHEN_POINTER_LEAVES,
                         DEFAULT_CLOSE_MENU_WHEN_POINTER_LEAVES),
-                hiddenValues == null
-                        ? Collections.emptySet()
-                        : new LinkedHashSet<>(hiddenValues),
+                hiddenTargetKeys,
                 orderValues == null ? Collections.emptyList() : orderValues,
                 bundle.getInt(
                         KEY_CONTENT_CAPTURE_MODE,
@@ -873,12 +880,6 @@ public final class DragShareSettings {
                 bundle.getBoolean(
                         KEY_PRELOAD_TEXT_SEGMENTER,
                         DEFAULT_PRELOAD_TEXT_SEGMENTER),
-                bundle.getBoolean(
-                        KEY_TEXT_COPY_ENABLED,
-                        DEFAULT_TEXT_COPY_ENABLED),
-                bundle.getBoolean(
-                        KEY_IMAGE_COPY_ENABLED,
-                        DEFAULT_IMAGE_COPY_ENABLED),
                 bundle.getInt(
                         KEY_MODERN_BLUR_RADIUS,
                         DEFAULT_MODERN_BLUR_RADIUS_DP),
@@ -889,10 +890,6 @@ public final class DragShareSettings {
 
     public boolean isSharingEnabled(boolean image) {
         return image ? imageSharingEnabled : textSharingEnabled;
-    }
-
-    public boolean isCopyEnabled(boolean image) {
-        return image ? imageCopyEnabled : textCopyEnabled;
     }
 
     public boolean isPortalCaptureMode() {
@@ -937,6 +934,33 @@ public final class DragShareSettings {
 
     static Uri settingsUri() {
         return Uri.parse(SETTINGS_URI_VALUE);
+    }
+
+    private static Set<String> migrateLegacyCopyTargetVisibility(
+            Set<String> hiddenTargetKeys,
+            boolean textCopyEnabled,
+            boolean imageCopyEnabled) {
+        LinkedHashSet<String> hidden = new LinkedHashSet<>(normalizeHiddenTargetKeys(
+                hiddenTargetKeys));
+        if (!textCopyEnabled) {
+            hidden.add(TARGET_COPY_TEXT);
+        }
+        if (!imageCopyEnabled) {
+            hidden.add(TARGET_COPY_IMAGE);
+        }
+        return hidden;
+    }
+
+    private static Set<String> normalizeHiddenTargetKeys(Set<String> hiddenTargetKeys) {
+        LinkedHashSet<String> hidden = new LinkedHashSet<>();
+        if (hiddenTargetKeys != null) {
+            hidden.addAll(hiddenTargetKeys);
+        }
+        if (hidden.remove(TARGET_COPY)) {
+            hidden.add(TARGET_COPY_TEXT);
+            hidden.add(TARGET_COPY_IMAGE);
+        }
+        return hidden;
     }
 
     private static Set<String> immutableKeys(Collection<String> values) {

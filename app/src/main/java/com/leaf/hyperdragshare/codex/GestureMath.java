@@ -7,6 +7,27 @@ final class GestureMath {
         return pointerY >= triggerTop;
     }
 
+    static boolean hasMovedTowardMenu(
+            int menuPosition,
+            float startX,
+            float startY,
+            float pointerX,
+            float pointerY,
+            float minimumDistance) {
+        float distance = Math.max(0f, minimumDistance);
+        switch (menuPosition) {
+            case DragShareSettings.SIMPLE_MENU_POSITION_TOP:
+                return startY - pointerY >= distance;
+            case DragShareSettings.SIMPLE_MENU_POSITION_LEFT:
+                return startX - pointerX >= distance;
+            case DragShareSettings.SIMPLE_MENU_POSITION_RIGHT:
+                return pointerX - startX >= distance;
+            case DragShareSettings.SIMPLE_MENU_POSITION_BOTTOM:
+            default:
+                return pointerY - startY >= distance;
+        }
+    }
+
     static int edgeScrollDirection(float pointerX, int viewportWidth, int edgeWidth) {
         if (viewportWidth <= 0 || edgeWidth <= 0) {
             return 0;

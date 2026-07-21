@@ -9,7 +9,7 @@
 ## 工程基线
 
 - 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 33，targetSdk 34，compileSdk 37。
-- 当前版本：`1.7.40`，`versionCode 64`。
+- 当前版本：`1.7.43`，`versionCode 67`。
 - 已验证宿主：传送门 `4.2.1`，包名 `com.miui.contentextension`。
 - LSPosed API：82，入口为 `com.leaf.hyperdragshare.codex.MainHook`。
 - 可靠的同手势跟手依赖 root 读取 Linux evdev；MIUI 输入监听仅作回退。
@@ -49,7 +49,8 @@
     必须锁定该侧并注销传感器，直到本次手势结束；不要在菜单暂时收起后重新选边。
 11. “手指移开时关闭分享菜单”是四种拖拽样式的公共行为。简洁/现代/流光离开菜单与触发带时移除
     线性菜单，环形离开展开面板区域时折叠；同一手势重新进入触发区后都应允许再次展开。
-12. 首页激活状态必须按当前来源解释：传送门模式按“无 Root → 当前版本未注入传送门 → 已激活”，
+12. 首页激活状态必须按当前来源解释：传送门模式按“无 Root → 当前版本未注入传送门 →
+   传送门 Root 权限不可用 → 已激活”，
     无障碍模式按“无 Root → 服务未启用 → 服务/Root 输入连接中 → 已激活”。传送门 Hook 必须通过
     `ModuleActivation.reportInjected()` 上报其编译时 `BuildConfig.VERSION_CODE`；不要把普通的
     `get_settings` 调用当作注入证明，否则 APK 更新后仍运行旧代码的传送门进程会被误报为已激活。

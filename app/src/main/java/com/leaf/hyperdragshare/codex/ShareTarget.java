@@ -46,12 +46,22 @@ final class ShareTarget {
                 true);
     }
 
-    static ShareTarget copyToClipboard(Drawable icon) {
+    static ShareTarget copyTextToClipboard(Drawable icon) {
         return new ShareTarget(
                 null,
-                "复制",
+                "复制文本",
                 icon,
-                DragShareSettings.TARGET_COPY,
+                DragShareSettings.TARGET_COPY_TEXT,
+                "builtin",
+                true);
+    }
+
+    static ShareTarget copyImageToClipboard(Drawable icon) {
+        return new ShareTarget(
+                null,
+                "复制图片",
+                icon,
+                DragShareSettings.TARGET_COPY_IMAGE,
                 "builtin",
                 true);
     }
@@ -82,8 +92,16 @@ final class ShareTarget {
         return builtIn && DragShareSettings.TARGET_SAVE_LOCAL.equals(key);
     }
 
+    boolean isCopyTextToClipboard() {
+        return builtIn && DragShareSettings.TARGET_COPY_TEXT.equals(key);
+    }
+
+    boolean isCopyImageToClipboard() {
+        return builtIn && DragShareSettings.TARGET_COPY_IMAGE.equals(key);
+    }
+
     boolean isCopyToClipboard() {
-        return builtIn && DragShareSettings.TARGET_COPY.equals(key);
+        return isCopyTextToClipboard() || isCopyImageToClipboard();
     }
 
     boolean isTextSegmentation() {

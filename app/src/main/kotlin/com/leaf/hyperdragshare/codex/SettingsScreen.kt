@@ -118,6 +118,8 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val ORDER_LIST_INDEX_OFFSET = 1
+private const val PORTAL_ACTIVATION_CHECK_ATTEMPTS = 45
+private const val PORTAL_ACTIVATION_CHECK_INTERVAL_MS = 100L
 
 private sealed interface SettingsRoute : NavKey {
     data object Main : SettingsRoute
@@ -419,14 +421,6 @@ private fun MainPage(
                         },
                     )
                     SwitchPreference(
-                        title = "启用文字复制",
-                        summary = "在文字分享菜单中显示复制",
-                        checked = settings.textCopyEnabled,
-                        onCheckedChange = { checked ->
-                            persist(copySettings(settings, textCopyEnabled = checked))
-                        },
-                    )
-                    SwitchPreference(
                         title = "预加载分词库",
                         summary = "启动时在后台加载词典，缩短首次打开文本分词的等待",
                         checked = settings.preloadTextSegmenter,
@@ -440,14 +434,6 @@ private fun MainPage(
                         checked = settings.imageSharingEnabled,
                         onCheckedChange = { checked ->
                             persist(copySettings(settings, imageSharingEnabled = checked))
-                        },
-                    )
-                    SwitchPreference(
-                        title = "启用图片复制",
-                        summary = "在图片分享菜单中显示复制",
-                        checked = settings.imageCopyEnabled,
-                        onCheckedChange = { checked ->
-                            persist(copySettings(settings, imageCopyEnabled = checked))
                         },
                     )
                 }
@@ -791,6 +777,7 @@ private enum class ActivationUiState {
     Checking,
     NoRoot,
     NotInjected,
+    PortalRootUnavailable,
     AccessibilityDisabled,
     AccessibilityConnecting,
     Active,
@@ -850,22 +837,26 @@ private fun ActivationStatusCard(
             }
             return@LaunchedEffect
         }
-        if (!ModuleActivation.isCurrentBuildInjected(context)) {
+        var injected = ModuleActivation.isCurrentBuildInjected(context)
+        var portalRootGranted = ModuleActivation.isCurrentBuildPortalRootGranted(context)
+        if (!injected || !portalRootGranted) {
             withContext(Dispatchers.IO) {
                 ModuleActivation.requestPortalInjectionHandshake()
             }
-            repeat(20) {
-                if (ModuleActivation.isCurrentBuildInjected(context)) {
+            repeat(PORTAL_ACTIVATION_CHECK_ATTEMPTS) {
+                injected = ModuleActivation.isCurrentBuildInjected(context)
+                portalRootGranted = ModuleActivation.isCurrentBuildPortalRootGranted(context)
+                if (injected && portalRootGranted) {
                     state = ActivationUiState.Active
                     return@LaunchedEffect
                 }
-                delay(100L)
+                delay(PORTAL_ACTIVATION_CHECK_INTERVAL_MS)
             }
         }
-        state = if (ModuleActivation.isCurrentBuildInjected(context)) {
-            ActivationUiState.Active
-        } else {
-            ActivationUiState.NotInjected
+        state = when {
+            !injected -> ActivationUiState.NotInjected
+            !portalRootGranted -> ActivationUiState.PortalRootUnavailable
+            else -> ActivationUiState.Active
         }
     }
 
@@ -881,6 +872,7 @@ private fun ActivationStatusCard(
         ActivationUiState.Checking -> "正在检测"
         ActivationUiState.NoRoot -> "未获取 Root 权限"
         ActivationUiState.NotInjected -> "未注入到传送门"
+        ActivationUiState.PortalRootUnavailable -> "传送门未获取 Root 权限"
         ActivationUiState.AccessibilityDisabled -> "无障碍服务未启用"
         ActivationUiState.AccessibilityConnecting -> "无障碍服务正在连接"
         ActivationUiState.Active -> "已激活"
@@ -888,7 +880,8 @@ private fun ActivationStatusCard(
     val summary = when (state) {
         ActivationUiState.Checking -> "正在检查运行环境"
         ActivationUiState.NoRoot -> "Root 输入通道当前不可用"
-        ActivationUiState.NotInjected -> "当前版本尚未在传送门进程中加载"
+        ActivationUiState.NotInjected -> "当前版本尚未在传送门进程中加载\n如果传送门未启动，该提示为正常现象"
+        ActivationUiState.PortalRootUnavailable -> "传送门进程未通过 Root 权限检测\n如果传送门未启动，该提示为正常现象"
         ActivationUiState.AccessibilityDisabled -> "请在系统设置中手动开启“HyperDragShare”服务"
         ActivationUiState.AccessibilityConnecting -> "正在等待无障碍服务和 Root 输入就绪"
         ActivationUiState.Active -> if (contentCaptureMode == DragShareSettings.CONTENT_CAPTURE_ACCESSIBILITY) {
@@ -901,6 +894,7 @@ private fun ActivationStatusCard(
         ActivationUiState.Checking -> "正在检测"
         ActivationUiState.NoRoot -> "ROOT"
         ActivationUiState.NotInjected -> "LSPosed"
+        ActivationUiState.PortalRootUnavailable -> "传送门 ROOT"
         ActivationUiState.AccessibilityDisabled -> "无障碍"
         ActivationUiState.AccessibilityConnecting -> "ROOT · 无障碍"
         ActivationUiState.Active -> if (contentCaptureMode == DragShareSettings.CONTENT_CAPTURE_ACCESSIBILITY) {
@@ -1692,7 +1686,8 @@ private fun querySettingsTargets(context: Context): List<ShareTarget> {
         emptyList()
     }
     return targets + listOf(
-        ShareTarget.copyToClipboard(ShareTargetRepository.loadCopyIcon(context)),
+        ShareTarget.copyTextToClipboard(ShareTargetRepository.loadCopyIcon(context)),
+        ShareTarget.copyImageToClipboard(ShareTargetRepository.loadCopyIcon(context)),
         ShareTarget.saveToLocal(ShareTargetRepository.loadSaveIcon(context)),
         ShareTarget.textSegmentation(ShareTargetRepository.loadTextSegmentationIcon(context)),
     )
@@ -1758,7 +1753,8 @@ private fun loadSettingsIcons(
 
 private fun targetSummary(target: ShareTarget): String {
     return when {
-        target.isCopyToClipboard() -> "可分别开关文字和图片菜单"
+        target.isCopyTextToClipboard() -> "将文字复制到剪贴板"
+        target.isCopyImageToClipboard() -> "将图片复制到剪贴板"
         target.isSaveToLocal() -> "仅在图片分享菜单中显示"
         target.isTextSegmentation() -> "仅在文字分享菜单中显示"
         else -> {
@@ -1836,8 +1832,6 @@ private fun copySettings(
     contentCaptureMode: Int = current.contentCaptureMode,
     textSharingEnabled: Boolean = current.textSharingEnabled,
     imageSharingEnabled: Boolean = current.imageSharingEnabled,
-    textCopyEnabled: Boolean = current.textCopyEnabled,
-    imageCopyEnabled: Boolean = current.imageCopyEnabled,
     preloadTextSegmenter: Boolean = current.preloadTextSegmenter,
     simpleMenuPosition: Int = current.simpleMenuPosition,
     simpleMenuOpacityPercent: Int = current.simpleMenuOpacityPercent,
@@ -1877,8 +1871,6 @@ private fun copySettings(
     accessibilityLongPressTimeoutMillis,
     accessibilityRecognitionSensitivityPercent,
     preloadTextSegmenter,
-    textCopyEnabled,
-    imageCopyEnabled,
     modernBlurRadiusDp,
     modernGlassOpacityPercent,
 )

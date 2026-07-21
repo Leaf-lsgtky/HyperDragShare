@@ -9,10 +9,29 @@ import org.junit.Test;
 
 public final class GestureMathTest {
     @Test
-    public void bottomTriggerUsesInclusiveBoundary() {
+    public void menuTriggersAndActivationMovementRespectDirection() {
         assertFalse(GestureMath.shouldShowMenu(799, 800));
         assertTrue(GestureMath.shouldShowMenu(800, 800));
         assertTrue(GestureMath.shouldShowMenu(1200, 800));
+
+        assertFalse(GestureMath.hasMovedTowardMenu(
+                DragShareSettings.SIMPLE_MENU_POSITION_BOTTOM,
+                500f, 800f, 500f, 815f, 16f));
+        assertTrue(GestureMath.hasMovedTowardMenu(
+                DragShareSettings.SIMPLE_MENU_POSITION_BOTTOM,
+                500f, 800f, 500f, 816f, 16f));
+        assertFalse(GestureMath.hasMovedTowardMenu(
+                DragShareSettings.SIMPLE_MENU_POSITION_BOTTOM,
+                500f, 800f, 540f, 800f, 16f));
+        assertTrue(GestureMath.hasMovedTowardMenu(
+                DragShareSettings.SIMPLE_MENU_POSITION_TOP,
+                500f, 800f, 500f, 784f, 16f));
+        assertTrue(GestureMath.hasMovedTowardMenu(
+                DragShareSettings.SIMPLE_MENU_POSITION_LEFT,
+                500f, 800f, 484f, 800f, 16f));
+        assertTrue(GestureMath.hasMovedTowardMenu(
+                DragShareSettings.SIMPLE_MENU_POSITION_RIGHT,
+                500f, 800f, 516f, 800f, 16f));
     }
 
     @Test
