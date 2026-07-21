@@ -31,6 +31,8 @@ public final class DragShareSettings {
     public static final int STYLE_PORTAL = 1;
     /** Left/right semicircle menu modeled after Oplus ROM circlemenuview. */
     public static final int STYLE_CIRCLE = 2;
+    /** HyperOS View-blurred overlay with an adaptive square preview. */
+    public static final int STYLE_MODERN = 3;
     /** @deprecated Kept as a source-compatibility alias for pre-1.4 callers. */
     @Deprecated
     public static final int STYLE_CARD = STYLE_PORTAL;
@@ -65,6 +67,14 @@ public final class DragShareSettings {
     public static final int MIN_ICON_OPACITY_PERCENT = 0;
     public static final int DEFAULT_ICON_OPACITY_PERCENT = 100;
     public static final int MAX_ICON_OPACITY_PERCENT = 100;
+
+    public static final int MIN_MODERN_BLUR_RADIUS_DP = 0;
+    public static final int DEFAULT_MODERN_BLUR_RADIUS_DP = 60;
+    public static final int MAX_MODERN_BLUR_RADIUS_DP = 150;
+
+    public static final int MIN_MODERN_GLASS_OPACITY_PERCENT = 0;
+    public static final int DEFAULT_MODERN_GLASS_OPACITY_PERCENT = 36;
+    public static final int MAX_MODERN_GLASS_OPACITY_PERCENT = 90;
 
     public static final boolean DEFAULT_BLOCK_BACKGROUND_SCROLL = false;
     public static final boolean DEFAULT_TEXT_SHARING_ENABLED = true;
@@ -108,6 +118,8 @@ public final class DragShareSettings {
     private static final String KEY_SIMPLE_MENU_CORNER_RADIUS = "simple_menu_corner_radius_dp";
     private static final String KEY_SIMPLE_MENU_EDGE_DISTANCE = "simple_menu_edge_distance_dp";
     private static final String KEY_ICON_OPACITY = "icon_opacity_percent";
+    private static final String KEY_MODERN_BLUR_RADIUS = "modern_blur_radius_dp";
+    private static final String KEY_MODERN_GLASS_OPACITY = "modern_glass_opacity_percent";
     private static final String KEY_CLOSE_MENU_WHEN_POINTER_LEAVES = "close_menu_when_pointer_leaves";
     private static final String KEY_HIDDEN_TARGETS = "hidden_targets";
     private static final String KEY_TARGET_ORDER = "target_order";
@@ -136,6 +148,8 @@ public final class DragShareSettings {
     public final int simpleMenuCornerRadiusDp;
     public final int simpleMenuEdgeDistanceDp;
     public final int iconOpacityPercent;
+    public final int modernBlurRadiusDp;
+    public final int modernGlassOpacityPercent;
     public final boolean closeMenuWhenPointerLeaves;
     public final Set<String> hiddenTargetKeys;
     public final List<String> targetOrder;
@@ -486,9 +500,66 @@ public final class DragShareSettings {
             boolean preloadTextSegmenter,
             boolean textCopyEnabled,
             boolean imageCopyEnabled) {
+        this(
+                colorMode,
+                uiStyle,
+                edgeTriggerDp,
+                scrollSpeedDpPerSecond,
+                blockBackgroundScroll,
+                textSharingEnabled,
+                imageSharingEnabled,
+                simpleMenuPosition,
+                simpleMenuOpacityPercent,
+                simpleMenuCornerRadiusDp,
+                simpleMenuEdgeDistanceDp,
+                iconOpacityPercent,
+                closeMenuWhenPointerLeaves,
+                hiddenTargetKeys,
+                targetOrder,
+                contentCaptureMode,
+                accessibilityLandscapeRecognitionEnabled,
+                accessibilityBlacklistedPackages,
+                accessibilityLongPressTimeoutMillis,
+                accessibilityRecognitionSensitivityPercent,
+                preloadTextSegmenter,
+                textCopyEnabled,
+                imageCopyEnabled,
+                DEFAULT_MODERN_BLUR_RADIUS_DP,
+                DEFAULT_MODERN_GLASS_OPACITY_PERCENT);
+    }
+
+    /** Full constructor including Miuix modern-overlay blur parameters. */
+    public DragShareSettings(
+            int colorMode,
+            int uiStyle,
+            int edgeTriggerDp,
+            int scrollSpeedDpPerSecond,
+            boolean blockBackgroundScroll,
+            boolean textSharingEnabled,
+            boolean imageSharingEnabled,
+            int simpleMenuPosition,
+            int simpleMenuOpacityPercent,
+            int simpleMenuCornerRadiusDp,
+            int simpleMenuEdgeDistanceDp,
+            int iconOpacityPercent,
+            boolean closeMenuWhenPointerLeaves,
+            Set<String> hiddenTargetKeys,
+            List<String> targetOrder,
+            int contentCaptureMode,
+            boolean accessibilityLandscapeRecognitionEnabled,
+            Set<String> accessibilityBlacklistedPackages,
+            int accessibilityLongPressTimeoutMillis,
+            int accessibilityRecognitionSensitivityPercent,
+            boolean preloadTextSegmenter,
+            boolean textCopyEnabled,
+            boolean imageCopyEnabled,
+            int modernBlurRadiusDp,
+            int modernGlassOpacityPercent) {
         this.colorMode = colorMode == COLOR_DARK ? COLOR_DARK : COLOR_LIGHT;
         this.contentCaptureMode = normalizeContentCaptureMode(contentCaptureMode);
-        this.uiStyle = uiStyle == STYLE_PORTAL || uiStyle == STYLE_CIRCLE
+        this.uiStyle = uiStyle == STYLE_PORTAL
+                || uiStyle == STYLE_CIRCLE
+                || uiStyle == STYLE_MODERN
                 ? uiStyle
                 : STYLE_SIMPLE;
         this.edgeTriggerDp = clamp(
@@ -522,6 +593,14 @@ public final class DragShareSettings {
                 iconOpacityPercent,
                 MIN_ICON_OPACITY_PERCENT,
                 MAX_ICON_OPACITY_PERCENT);
+        this.modernBlurRadiusDp = clamp(
+                modernBlurRadiusDp,
+                MIN_MODERN_BLUR_RADIUS_DP,
+                MAX_MODERN_BLUR_RADIUS_DP);
+        this.modernGlassOpacityPercent = clamp(
+                modernGlassOpacityPercent,
+                MIN_MODERN_GLASS_OPACITY_PERCENT,
+                MAX_MODERN_GLASS_OPACITY_PERCENT);
         this.closeMenuWhenPointerLeaves = closeMenuWhenPointerLeaves;
         this.hiddenTargetKeys = immutableKeys(hiddenTargetKeys);
         this.targetOrder = immutableKeysAsList(targetOrder);
@@ -622,7 +701,13 @@ public final class DragShareSettings {
                         DEFAULT_TEXT_COPY_ENABLED),
                 preferences.getBoolean(
                         KEY_IMAGE_COPY_ENABLED,
-                        DEFAULT_IMAGE_COPY_ENABLED));
+                        DEFAULT_IMAGE_COPY_ENABLED),
+                preferences.getInt(
+                        KEY_MODERN_BLUR_RADIUS,
+                        DEFAULT_MODERN_BLUR_RADIUS_DP),
+                preferences.getInt(
+                        KEY_MODERN_GLASS_OPACITY,
+                        DEFAULT_MODERN_GLASS_OPACITY_PERCENT));
     }
 
     public void saveLocal(Context context) {
@@ -647,6 +732,8 @@ public final class DragShareSettings {
                 .putInt(KEY_SIMPLE_MENU_CORNER_RADIUS, simpleMenuCornerRadiusDp)
                 .putInt(KEY_SIMPLE_MENU_EDGE_DISTANCE, simpleMenuEdgeDistanceDp)
                 .putInt(KEY_ICON_OPACITY, iconOpacityPercent)
+                .putInt(KEY_MODERN_BLUR_RADIUS, modernBlurRadiusDp)
+                .putInt(KEY_MODERN_GLASS_OPACITY, modernGlassOpacityPercent)
                 .putBoolean(
                         KEY_CLOSE_MENU_WHEN_POINTER_LEAVES,
                         closeMenuWhenPointerLeaves)
@@ -702,6 +789,8 @@ public final class DragShareSettings {
         result.putInt(KEY_SIMPLE_MENU_CORNER_RADIUS, simpleMenuCornerRadiusDp);
         result.putInt(KEY_SIMPLE_MENU_EDGE_DISTANCE, simpleMenuEdgeDistanceDp);
         result.putInt(KEY_ICON_OPACITY, iconOpacityPercent);
+        result.putInt(KEY_MODERN_BLUR_RADIUS, modernBlurRadiusDp);
+        result.putInt(KEY_MODERN_GLASS_OPACITY, modernGlassOpacityPercent);
         result.putBoolean(KEY_CLOSE_MENU_WHEN_POINTER_LEAVES, closeMenuWhenPointerLeaves);
         result.putStringArrayList(KEY_HIDDEN_TARGETS, new ArrayList<>(hiddenTargetKeys));
         result.putStringArrayList(KEY_TARGET_ORDER, new ArrayList<>(targetOrder));
@@ -789,7 +878,13 @@ public final class DragShareSettings {
                         DEFAULT_TEXT_COPY_ENABLED),
                 bundle.getBoolean(
                         KEY_IMAGE_COPY_ENABLED,
-                        DEFAULT_IMAGE_COPY_ENABLED));
+                        DEFAULT_IMAGE_COPY_ENABLED),
+                bundle.getInt(
+                        KEY_MODERN_BLUR_RADIUS,
+                        DEFAULT_MODERN_BLUR_RADIUS_DP),
+                bundle.getInt(
+                        KEY_MODERN_GLASS_OPACITY,
+                        DEFAULT_MODERN_GLASS_OPACITY_PERCENT));
     }
 
     public boolean isSharingEnabled(boolean image) {
@@ -806,6 +901,10 @@ public final class DragShareSettings {
 
     public boolean isAccessibilityCaptureMode() {
         return contentCaptureMode == CONTENT_CAPTURE_ACCESSIBILITY;
+    }
+
+    public boolean isModernStyle() {
+        return uiStyle == STYLE_MODERN;
     }
 
     public boolean isAccessibilityPackageBlacklisted(String packageName) {

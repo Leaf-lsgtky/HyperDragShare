@@ -75,7 +75,7 @@ final class PortalHooks {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
                         DragShareController current = controller;
-                        if (current != null && current.isActive()) {
+                        if (current != null && current.shouldSuppressPortalHostFloatWindow()) {
                             param.setResult(null);
                         }
                     }
@@ -169,6 +169,7 @@ final class PortalHooks {
                             param.thisObject,
                             current.latestPointerX(),
                             current.latestPointerY());
+                    current.reservePortalHostFloatWindowSuppression();
                     current.show(
                             content,
                             point == null ? -1f : point.x,

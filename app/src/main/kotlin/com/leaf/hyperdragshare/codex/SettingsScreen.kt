@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
@@ -96,8 +97,6 @@ import top.yukonga.miuix.kmp.basic.TopAppBarState
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Copy
-import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -251,6 +250,12 @@ private fun MainPage(
     }
     var iconOpacity by remember(settings.iconOpacityPercent) {
         mutableFloatStateOf(settings.iconOpacityPercent.toFloat())
+    }
+    var modernBlurRadius by remember(settings.modernBlurRadiusDp) {
+        mutableFloatStateOf(settings.modernBlurRadiusDp.toFloat())
+    }
+    var modernGlassOpacity by remember(settings.modernGlassOpacityPercent) {
+        mutableFloatStateOf(settings.modernGlassOpacityPercent.toFloat())
     }
     var accessibilityLongPressTimeout by remember(settings.accessibilityLongPressTimeoutMillis) {
         mutableFloatStateOf(
@@ -473,18 +478,26 @@ private fun MainPage(
                     OverlayDropdownPreference(
                         title = "拖拽样式",
                         summary = "仅影响拖拽时的悬浮菜单",
-                        items = listOf("简洁", "流光", "环形"),
-                        selectedIndex = settings.uiStyle.coerceIn(0, 2),
+                        items = listOf("简洁", "流光", "环形", "现代"),
+                        selectedIndex = settings.uiStyle.coerceIn(0, 3),
                         onSelectedIndexChange = { selected ->
-                            persist(copySettings(settings, uiStyle = selected.coerceIn(0, 2)))
+                            persist(copySettings(settings, uiStyle = selected.coerceIn(0, 3)))
                         },
                     )
                 }
             }
 
-            if (settings.uiStyle == DragShareSettings.STYLE_SIMPLE) {
+            if (settings.uiStyle == DragShareSettings.STYLE_SIMPLE
+                || settings.uiStyle == DragShareSettings.STYLE_MODERN
+            ) {
                 item(key = "simple-appearance-title") {
-                    SmallTitle(text = "简洁样式")
+                    SmallTitle(
+                        text = if (settings.uiStyle == DragShareSettings.STYLE_MODERN) {
+                            "现代样式"
+                        } else {
+                            "简洁样式"
+                        },
+                    )
                 }
                 item(key = "simple-appearance-preferences") {
                     Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
@@ -502,63 +515,105 @@ private fun MainPage(
                                 )
                             },
                         )
-                        SliderPreference(
-                            title = "背景不透明度",
-                            value = simpleOpacity,
-                            valueText = "${simpleOpacity.roundToInt()}%",
-                            valueRange = DragShareSettings.MIN_SIMPLE_MENU_OPACITY_PERCENT.toFloat()
-                                ..DragShareSettings.MAX_SIMPLE_MENU_OPACITY_PERCENT.toFloat(),
-                            steps = 15,
-                            showKeyPoints = true,
-                            keyPoints = listOf(20f, 40f, 60f, 80f, 100f),
-                            onValueChange = { simpleOpacity = it },
-                            onValueChangeFinished = {
-                                persist(
-                                    copySettings(
-                                        settings,
-                                        simpleMenuOpacityPercent = simpleOpacity.roundToInt(),
-                                    ),
-                                )
-                            },
-                        )
-                        SliderPreference(
-                            title = "背景圆角",
-                            value = simpleCornerRadius,
-                            valueText = "${simpleCornerRadius.roundToInt()} dp",
-                            valueRange = DragShareSettings.MIN_SIMPLE_MENU_CORNER_RADIUS_DP.toFloat()
-                                ..DragShareSettings.MAX_SIMPLE_MENU_CORNER_RADIUS_DP.toFloat(),
-                            steps = 16,
-                            showKeyPoints = true,
-                            keyPoints = listOf(0f, 8f, 16f, 24f, 32f),
-                            onValueChange = { simpleCornerRadius = it },
-                            onValueChangeFinished = {
-                                persist(
-                                    copySettings(
-                                        settings,
-                                        simpleMenuCornerRadiusDp = simpleCornerRadius.roundToInt(),
-                                    ),
-                                )
-                            },
-                        )
-                        SliderPreference(
-                            title = "菜单到边缘距离",
-                            value = simpleEdgeDistance,
-                            valueText = "${simpleEdgeDistance.roundToInt()} dp",
-                            valueRange = DragShareSettings.MIN_SIMPLE_MENU_EDGE_DISTANCE_DP.toFloat()
-                                ..DragShareSettings.MAX_SIMPLE_MENU_EDGE_DISTANCE_DP.toFloat(),
-                            steps = 16,
-                            showKeyPoints = true,
-                            keyPoints = listOf(0f, 8f, 16f, 32f, 64f),
-                            onValueChange = { simpleEdgeDistance = it },
-                            onValueChangeFinished = {
-                                persist(
-                                    copySettings(
-                                        settings,
-                                        simpleMenuEdgeDistanceDp = simpleEdgeDistance.roundToInt(),
-                                    ),
-                                )
-                            },
-                        )
+                        if (settings.uiStyle == DragShareSettings.STYLE_SIMPLE) {
+                            SliderPreference(
+                                title = "背景不透明度",
+                                value = simpleOpacity,
+                                valueText = "${simpleOpacity.roundToInt()}%",
+                                valueRange = DragShareSettings.MIN_SIMPLE_MENU_OPACITY_PERCENT.toFloat()
+                                    ..DragShareSettings.MAX_SIMPLE_MENU_OPACITY_PERCENT.toFloat(),
+                                steps = 15,
+                                showKeyPoints = true,
+                                keyPoints = listOf(20f, 40f, 60f, 80f, 100f),
+                                onValueChange = { simpleOpacity = it },
+                                onValueChangeFinished = {
+                                    persist(
+                                        copySettings(
+                                            settings,
+                                            simpleMenuOpacityPercent = simpleOpacity.roundToInt(),
+                                        ),
+                                    )
+                                },
+                            )
+                            SliderPreference(
+                                title = "背景圆角",
+                                value = simpleCornerRadius,
+                                valueText = "${simpleCornerRadius.roundToInt()} dp",
+                                valueRange = DragShareSettings.MIN_SIMPLE_MENU_CORNER_RADIUS_DP.toFloat()
+                                    ..DragShareSettings.MAX_SIMPLE_MENU_CORNER_RADIUS_DP.toFloat(),
+                                steps = 16,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0f, 8f, 16f, 24f, 32f),
+                                onValueChange = { simpleCornerRadius = it },
+                                onValueChangeFinished = {
+                                    persist(
+                                        copySettings(
+                                            settings,
+                                            simpleMenuCornerRadiusDp = simpleCornerRadius.roundToInt(),
+                                        ),
+                                    )
+                                },
+                            )
+                            SliderPreference(
+                                title = "菜单到边缘距离",
+                                value = simpleEdgeDistance,
+                                valueText = "${simpleEdgeDistance.roundToInt()} dp",
+                                valueRange = DragShareSettings.MIN_SIMPLE_MENU_EDGE_DISTANCE_DP.toFloat()
+                                    ..DragShareSettings.MAX_SIMPLE_MENU_EDGE_DISTANCE_DP.toFloat(),
+                                steps = 16,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0f, 8f, 16f, 32f, 64f),
+                                onValueChange = { simpleEdgeDistance = it },
+                                onValueChangeFinished = {
+                                    persist(
+                                        copySettings(
+                                            settings,
+                                            simpleMenuEdgeDistanceDp = simpleEdgeDistance.roundToInt(),
+                                        ),
+                                    )
+                                },
+                            )
+                        } else {
+                            SliderPreference(
+                                title = "模糊半径",
+                                summary = "HyperOS 局部背景模糊强度",
+                                value = modernBlurRadius,
+                                valueText = "${modernBlurRadius.roundToInt()} dp",
+                                valueRange = DragShareSettings.MIN_MODERN_BLUR_RADIUS_DP.toFloat()
+                                    ..DragShareSettings.MAX_MODERN_BLUR_RADIUS_DP.toFloat(),
+                                steps = 30,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0f, 20f, 40f, 60f, 100f, 150f),
+                                onValueChange = { modernBlurRadius = it },
+                                onValueChangeFinished = {
+                                    persist(
+                                        copySettings(
+                                            settings,
+                                            modernBlurRadiusDp = modernBlurRadius.roundToInt(),
+                                        ),
+                                    )
+                                },
+                            )
+                            SliderPreference(
+                                title = "模糊不透明度",
+                                value = modernGlassOpacity,
+                                valueText = "${modernGlassOpacity.roundToInt()}%",
+                                valueRange = DragShareSettings.MIN_MODERN_GLASS_OPACITY_PERCENT.toFloat()
+                                    ..DragShareSettings.MAX_MODERN_GLASS_OPACITY_PERCENT.toFloat(),
+                                steps = 18,
+                                showKeyPoints = true,
+                                keyPoints = listOf(0f, 25f, 50f, 75f, 90f),
+                                onValueChange = { modernGlassOpacity = it },
+                                onValueChangeFinished = {
+                                    persist(
+                                        copySettings(
+                                            settings,
+                                            modernGlassOpacityPercent = modernGlassOpacity.roundToInt(),
+                                        ),
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -1722,57 +1777,18 @@ private fun TargetIcon(
     size: Dp = 40.dp,
     normalizedBitmap: Bitmap? = null,
 ) {
-    if (target.isSaveToLocal() || target.isCopyToClipboard()) {
-        val icon = if (target.isCopyToClipboard()) MiuixIcons.Copy else MiuixIcons.Download
-        Box(
-            modifier = modifier.size(size),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(size * 0.82f)
-                .squircleBackground(
-                    color = MiuixTheme.colorScheme.primary,
-                    cornerRadius = size * 0.205f,
-                ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(size * 0.5f),
-                    tint = Color.White,
-                )
-            }
-        }
-        return
+    val builtInAction = target.isCopyToClipboard()
+        || target.isSaveToLocal()
+        || target.isTextSegmentation()
+    val targetSizePx = with(LocalDensity.current) {
+        size.roundToPx().coerceAtLeast(1)
     }
-    if (target.isTextSegmentation()) {
-        Box(
-            modifier = modifier.size(size),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(size * 0.82f)
-                    .squircleBackground(
-                        color = MiuixTheme.colorScheme.primary,
-                        cornerRadius = size * 0.205f,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "分",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                )
-            }
+    val bitmap = remember(target, normalizedBitmap, targetSizePx, builtInAction) {
+        if (builtInAction) {
+            drawableBitmap(ShareTargetRepository.iconForDisplay(target), targetSizePx)
+        } else {
+            normalizedBitmap ?: drawableBitmap(target.icon)
         }
-        return
-    }
-    val bitmap = remember(target, normalizedBitmap) {
-        normalizedBitmap ?: drawableBitmap(target.icon)
     }
     if (bitmap != null) {
         Image(
@@ -1790,15 +1806,20 @@ private fun TargetIcon(
     }
 }
 
-private fun drawableBitmap(drawable: Drawable?): Bitmap? {
+private fun drawableBitmap(drawable: Drawable?, squareSizePx: Int? = null): Bitmap? {
     if (drawable == null) return null
-    val width = drawable.intrinsicWidth.coerceAtLeast(1)
-    val height = drawable.intrinsicHeight.coerceAtLeast(1)
+    val snapshot = try {
+        drawable.constantState?.newDrawable()?.mutate() ?: drawable.mutate()
+    } catch (_: Throwable) {
+        drawable
+    }
+    val width = squareSizePx ?: snapshot.intrinsicWidth.coerceAtLeast(1)
+    val height = squareSizePx ?: snapshot.intrinsicHeight.coerceAtLeast(1)
     return try {
         createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
             val canvas = Canvas(bitmap)
-            drawable.setBounds(0, 0, width, height)
-            drawable.draw(canvas)
+            snapshot.setBounds(0, 0, width, height)
+            snapshot.draw(canvas)
         }
     } catch (_: Throwable) {
         null
@@ -1823,6 +1844,8 @@ private fun copySettings(
     simpleMenuCornerRadiusDp: Int = current.simpleMenuCornerRadiusDp,
     simpleMenuEdgeDistanceDp: Int = current.simpleMenuEdgeDistanceDp,
     iconOpacityPercent: Int = current.iconOpacityPercent,
+    modernBlurRadiusDp: Int = current.modernBlurRadiusDp,
+    modernGlassOpacityPercent: Int = current.modernGlassOpacityPercent,
     closeMenuWhenPointerLeaves: Boolean = current.closeMenuWhenPointerLeaves,
     hiddenTargetKeys: Set<String> = current.hiddenTargetKeys,
     targetOrder: List<String> = current.targetOrder,
@@ -1856,6 +1879,8 @@ private fun copySettings(
     preloadTextSegmenter,
     textCopyEnabled,
     imageCopyEnabled,
+    modernBlurRadiusDp,
+    modernGlassOpacityPercent,
 )
 
 @Suppress("DEPRECATION")

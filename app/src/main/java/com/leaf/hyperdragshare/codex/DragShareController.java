@@ -30,6 +30,7 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
 import android.view.ViewOutlineProvider;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -39,7 +40,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 final class DragShareController {
     private static final String TAG = "DragShare/UI";
@@ -54,6 +57,10 @@ final class DragShareController {
     private static final int MENU_TRIGGER_DP = 72;
     private static final int PORTAL_TRIGGER_FROM_BOTTOM_DP = 96;
     private static final int PORTAL_ITEM_ENTER_OFFSET_DP = 168;
+    private static final long MODERN_OVERLAY_EXIT_DURATION_MS = 220L;
+    private static final long LINEAR_MENU_EXIT_DURATION_MS = 160L;
+    private static final long PREVIEW_EXIT_DURATION_MS = 160L;
+    private static final int MODERN_BOTTOM_MENU_SIDE_MARGIN_DP = 12;
     private static final int CIRCLE_EDGE_TRIGGER_DP = 76;
     private static final int CIRCLE_EDGE_SOFT_DISTANCE_DP = 180;
     private static final long CIRCLE_EDGE_OPEN_DELAY_MS = 200L;
@@ -81,7 +88,9 @@ final class DragShareController {
                 mainHandler.postDelayed(this, circleScrollIntervalMs());
                 return;
             }
-            if (edgeDirection == 0 || (menuScroll == null && menuVerticalScroll == null)) {
+            if (edgeDirection == 0 || (menuScroll == null
+                    && menuVerticalScroll == null
+                    && modernMenuView == null)) {
                 return;
             }
             long now = SystemClock.uptimeMillis();
@@ -92,7 +101,9 @@ final class DragShareController {
             int distance = Math.max(
                     1,
                     Math.round(dpFloat(settings.scrollSpeedDpPerSecond) * elapsed / 1000f));
-            if (menuScroll != null) {
+            if (modernMenuView != null) {
+                modernMenuView.scrollByPixels(edgeDirection * distance);
+            } else if (menuScroll != null) {
                 menuScroll.scrollBy(edgeDirection * distance, 0);
             } else {
                 menuVerticalScroll.scrollBy(0, edgeDirection * distance);
@@ -123,6 +134,9 @@ final class DragShareController {
 
     private volatile boolean active;
     private volatile boolean destroyed;
+    // startPick*Task can create Taplus' full-screen float view before this controller reaches
+    // the main thread. Keep its window suppressed during that small handoff.
+    private volatile boolean pendingPortalHostFloatWindowSuppression;
     private volatile float lastObservedX = -1;
     private volatile float lastObservedY = -1;
     private volatile long lastObservedEventTime;
@@ -156,15 +170,29 @@ final class DragShareController {
     private int nearHandSide = DragShareSettings.SIMPLE_MENU_POSITION_RIGHT;
     private boolean nearHandSideLocked;
 
-    private FrameLayout previewView;
+    private View previewView;
+    private ModernPreviewOverlayView modernPreviewView;
+    private ModernOverlayWindow modernPreviewWindow;
     private WindowManager.LayoutParams previewParams;
     private int previewWidth;
     private int previewHeight;
+    private boolean modernPreviewEnterStarted;
+    // Keep an exiting preview addressable until its animation completes so a new drag can
+    // tear it down immediately instead of briefly stacking two overlay windows.
+    private int previewExitGeneration;
+    private View exitingPreviewView;
+    private ModernPreviewOverlayView exitingModernPreviewView;
+    private ModernOverlayWindow exitingModernPreviewWindow;
 
     private PortalGlowView glowView;
     private WindowManager.LayoutParams glowParams;
 
-    private FrameLayout menuView;
+    private View menuView;
+    private ModernMenuOverlayView modernMenuView;
+    private ModernOverlayWindow modernMenuWindow;
+    private Runnable modernMenuDisposeRunnable;
+    private int linearMenuFadeGeneration;
+    private View fadingLinearMenuView;
     private WindowManager.LayoutParams menuParams;
     private HorizontalScrollView menuScroll;
     private ScrollView menuVerticalScroll;
@@ -226,6 +254,14 @@ final class DragShareController {
 
     boolean isActive() {
         return active;
+    }
+
+    void reservePortalHostFloatWindowSuppression() {
+        pendingPortalHostFloatWindowSuppression = true;
+    }
+
+    boolean shouldSuppressPortalHostFloatWindow() {
+        return active || pendingPortalHostFloatWindowSuppression;
     }
 
     void show(
@@ -324,13 +360,16 @@ final class DragShareController {
                 cancelGestureOnMain();
             } else {
                 backgroundTouchBlocker.stop();
-                removeGestureViews();
+                if (!isPreviewExitPending()) {
+                    removeGestureViews();
+                }
             }
         }, 32L);
     }
 
     void destroy() {
         destroyed = true;
+        pendingPortalHostFloatWindowSuppression = false;
         runOnMain(() -> {
             active = false;
             if (session != null) {
@@ -349,9 +388,11 @@ final class DragShareController {
             float requestedInitialY,
             DragShareSettings loadedSettings) {
         if (destroyed) {
+            pendingPortalHostFloatWindowSuppression = false;
             return;
         }
         if (active) {
+            pendingPortalHostFloatWindowSuppression = false;
             if (!duplicateStartLogged) {
                 duplicateStartLogged = true;
                 log("duplicate Taplus start ignored during active drag");
@@ -377,24 +418,31 @@ final class DragShareController {
         removeGestureViews();
 
         if (!settings.isSharingEnabled(payload.isImage())) {
+            pendingPortalHostFloatWindowSuppression = false;
             log("sharing disabled kind=" + payload.kind);
             return;
         }
-        session = new Session(payload);
-        refreshDisplayGeometry();
-        createPreview(payload);
-        createGlow();
 
         try {
+            session = new Session(payload);
+            refreshDisplayGeometry();
+            createPreview(payload);
+            createGlow();
             if (glowView != null && glowParams != null) {
                 windowManager.addView(glowView, glowParams);
                 glowView.start();
             }
-            windowManager.addView(previewView, previewParams);
+            if (modernPreviewWindow != null) {
+                modernPreviewWindow.show();
+            } else {
+                windowManager.addView(previewView, previewParams);
+            }
             active = true;
+            pendingPortalHostFloatWindowSuppression = false;
             registerNearHandSensorIfNeeded();
             traceAccessibility("overlay added kind=" + payload.kind);
         } catch (Throwable error) {
+            pendingPortalHostFloatWindowSuppression = false;
             log("unable to add preview overlay", error);
             traceAccessibility("overlay add failed=" + error.getClass().getSimpleName()
                     + ":" + String.valueOf(error.getMessage()));
@@ -482,10 +530,34 @@ final class DragShareController {
     }
 
     private void createPreview(CapturedContent payload) {
+        if (isModernStyle()) {
+            int side = ModernPreviewSizer.squareSidePx(
+                    payload,
+                    screenWidth,
+                    context.getResources().getDisplayMetrics().density);
+            previewWidth = side;
+            previewHeight = side;
+            modernPreviewView = new ModernPreviewOverlayView(context, payload, settings);
+            previewView = modernPreviewView;
+            previewParams = overlayParams(previewWidth, previewHeight, "DragShare modern preview");
+            try {
+                modernPreviewWindow = new ModernOverlayWindow(
+                        context,
+                        windowManager,
+                        modernPreviewView,
+                        previewParams,
+                        dp(settings.modernBlurRadiusDp));
+            } catch (Throwable error) {
+                modernPreviewWindow = null;
+                log("unable to create native modern preview window", error);
+            }
+            return;
+        }
         boolean portalStyle = isPortalStyle();
         boolean circleStyle = isCircleStyle();
         boolean compactStyle = portalStyle || circleStyle;
-        previewView = new FrameLayout(context);
+        FrameLayout standardPreviewView = new FrameLayout(context);
+        previewView = standardPreviewView;
         previewView.setClipToOutline(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             previewView.setForceDarkAllowed(false);
@@ -514,7 +586,7 @@ final class DragShareController {
                 text.setPadding(dp(7), dp(7), dp(7), dp(7));
                 text.setMaxLines(4);
                 text.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                previewView.addView(text, new FrameLayout.LayoutParams(
+                standardPreviewView.addView(text, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
             } else {
@@ -522,7 +594,7 @@ final class DragShareController {
                 image.setImageBitmap(payload.bitmap);
                 image.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 image.setPadding(dp(3), dp(3), dp(3), dp(3));
-                previewView.addView(image, new FrameLayout.LayoutParams(
+                standardPreviewView.addView(image, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
             }
@@ -537,7 +609,7 @@ final class DragShareController {
             text.setPadding(dp(12), dp(10), dp(12), dp(10));
             text.setMaxLines(4);
             text.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            previewView.addView(text, new FrameLayout.LayoutParams(
+            standardPreviewView.addView(text, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
         } else {
@@ -547,7 +619,7 @@ final class DragShareController {
             image.setImageBitmap(payload.bitmap);
             image.setScaleType(ImageView.ScaleType.FIT_CENTER);
             image.setPadding(dp(6), dp(6), dp(6), dp(6));
-            previewView.addView(image, new FrameLayout.LayoutParams(
+            standardPreviewView.addView(image, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -569,6 +641,10 @@ final class DragShareController {
     }
 
     private void startPreviewEnterAnimation() {
+        if (isModernStyle()) {
+            enableModernLocalBlurAndReveal();
+            return;
+        }
         if (previewView == null || !isPortalStyle()) {
             return;
         }
@@ -584,7 +660,60 @@ final class DragShareController {
                 .start();
     }
 
+    private void enableModernLocalBlurAndReveal() {
+        ModernPreviewOverlayView preview = modernPreviewView;
+        if (preview == null) {
+            return;
+        }
+        modernPreviewEnterStarted = false;
+        int blurRadiusPx = dp(settings.modernBlurRadiusDp);
+        boolean enabled = modernPreviewWindow != null
+                && modernPreviewWindow.isNativeBackdropBlurEnabled();
+        log("modern Android background blur " + (enabled ? "enabled" : "unavailable")
+                + " radiusPx=" + blurRadiusPx);
+        revealModernPreview(preview);
+    }
+
+    private void revealModernPreview(ModernPreviewOverlayView preview) {
+        if (preview == null || modernPreviewEnterStarted) {
+            return;
+        }
+        modernPreviewEnterStarted = true;
+        if (modernPreviewWindow != null) {
+            modernPreviewWindow.showAnimated();
+        } else {
+            preview.showAnimated();
+        }
+    }
     private void createMenu() {
+        if (isModernStyle()) {
+            Map<ShareTarget, Drawable> icons = new LinkedHashMap<>();
+            for (ShareTarget target : shareTargets) {
+                icons.put(target, iconForTarget(target));
+            }
+            modernMenuView = new ModernMenuOverlayView(
+                    context,
+                    new ArrayList<>(shareTargets),
+                    icons,
+                    settings,
+                    isVerticalSimpleMenu());
+            menuView = modernMenuView;
+            menuParams = overlayParams(menuWidth, menuHeight, "DragShare modern targets");
+            menuParams.x = menuLeft;
+            menuParams.y = menuTop;
+            try {
+                modernMenuWindow = new ModernOverlayWindow(
+                        context,
+                        windowManager,
+                        modernMenuView,
+                        menuParams,
+                        dp(settings.modernBlurRadiusDp));
+            } catch (Throwable error) {
+                modernMenuWindow = null;
+                log("unable to create native modern menu window", error);
+            }
+            return;
+        }
         if (isCircleStyle()) {
             circleMenuView = new CircleMenuOverlayView(
                     context,
@@ -607,21 +736,22 @@ final class DragShareController {
         }
         boolean portalStyle = isPortalStyle();
         boolean vertical = !portalStyle && isVerticalSimpleMenu();
-        menuView = new FrameLayout(context);
-        menuView.setClipChildren(false);
-        menuView.setClipToPadding(false);
+        FrameLayout linearMenuView = new FrameLayout(context);
+        menuView = linearMenuView;
+        linearMenuView.setClipChildren(false);
+        linearMenuView.setClipToPadding(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            menuView.setForceDarkAllowed(false);
+            linearMenuView.setForceDarkAllowed(false);
         }
         int horizontalPadding = dp(portalStyle ? 10 : 4);
         int verticalPadding = dp(portalStyle ? 4 : 4);
         int bottomPadding = dp(portalStyle ? 2 : 4);
         if (portalStyle) {
-            menuView.setBackground(roundDrawable(Color.TRANSPARENT, 0));
+            linearMenuView.setBackground(roundDrawable(Color.TRANSPARENT, 0));
         } else {
             addSimpleMenuBackground();
         }
-        menuView.setElevation(dp(portalStyle ? 0 : 10));
+        linearMenuView.setElevation(dp(portalStyle ? 0 : 10));
 
         FrameLayout menuContent = new FrameLayout(context);
         menuContent.setClipChildren(false);
@@ -631,7 +761,7 @@ final class DragShareController {
                 verticalPadding,
                 horizontalPadding,
                 bottomPadding);
-        menuView.addView(menuContent, new FrameLayout.LayoutParams(
+        linearMenuView.addView(menuContent, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -739,6 +869,10 @@ final class DragShareController {
     }
 
     private void addSimpleMenuBackground() {
+        if (!(menuView instanceof FrameLayout)) {
+            return;
+        }
+        FrameLayout linearMenuView = (FrameLayout) menuView;
         int cornerRadiusDp = settings.simpleMenuCornerRadiusDp;
         View background = new View(context);
         background.setBackground(roundDrawable(
@@ -746,17 +880,17 @@ final class DragShareController {
                 cornerRadiusDp));
         background.setAlpha(simpleMenuBackgroundOpacityFraction(
                 settings.simpleMenuOpacityPercent));
-        menuView.addView(background, new FrameLayout.LayoutParams(
+        linearMenuView.addView(background, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         int cornerRadiusPx = dp(cornerRadiusDp);
-        menuView.setOutlineProvider(new ViewOutlineProvider() {
+        linearMenuView.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
                 outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadiusPx);
             }
         });
-        menuView.setClipToOutline(true);
+        linearMenuView.setClipToOutline(true);
     }
 
     private void handleMotionOnMain(
@@ -959,16 +1093,17 @@ final class DragShareController {
             return;
         }
         stopEdgeScroll();
-        if (menuView != null) {
-            menuView.animate().cancel();
-            try {
-                windowManager.removeViewImmediate(menuView);
-            } catch (Throwable ignored) {
-                // The overlay may already have been removed by the host.
-            }
-        }
         menuShown = false;
+        if (isModernStyle() && modernMenuView != null) {
+            ModernMenuOverlayView menuToDispose = modernMenuView;
+            scheduleModernMenuDispose(menuToDispose, modernMenuWindow);
+        } else if (menuView != null) {
+            fadeOutLinearMenu(menuView);
+        }
         selectedTarget = null;
+        if (modernMenuView != null) {
+            modernMenuView.setSelectedTarget(null);
+        }
         if (glowView != null && isPortalStyle()) {
             glowView.collapseMenu();
             updatePortalPullEffect(lastX, lastY);
@@ -1001,10 +1136,20 @@ final class DragShareController {
             return;
         }
         boolean wasShown = menuShown;
+        View previousMenuView = menuView;
         if (wasShown) {
             hideLinearMenu();
+            if (!isModernStyle()) {
+                cancelLinearMenuFadeOut();
+                removeLinearMenuImmediately(previousMenuView);
+            }
+        }
+        if (!wasShown && modernMenuWindow != null) {
+            modernMenuWindow.dispose();
         }
         menuView = null;
+        modernMenuView = null;
+        modernMenuWindow = null;
         menuParams = null;
         menuScroll = null;
         menuVerticalScroll = null;
@@ -1096,12 +1241,56 @@ final class DragShareController {
             mainHandler.post(() -> updateSelectedTarget(lastX, lastY));
             return;
         }
+        if (isModernStyle()) {
+            cancelModernMenuDispose();
+            // A menu that completed its exit animation is removed to guarantee that the
+            // blurred overlay cannot remain on screen. Recreate it when the same drag re-enters
+            // the trigger zone, preserving the public "leave and return" behavior.
+            if (menuView == null || modernMenuView == null) {
+                createMenu();
+            }
+        }
         if (menuView == null) {
             return;
         }
         lockNearHandMenuSide();
+        if (!isModernStyle() && menuView.isAttachedToWindow()) {
+            cancelLinearMenuFadeOut(menuView);
+            menuView.animate().cancel();
+            menuShown = true;
+            menuView.animate()
+                    .alpha(1f)
+                    .translationX(0f)
+                    .translationY(0f)
+                    .setDuration(LINEAR_MENU_EXIT_DURATION_MS)
+                    .setInterpolator(new DecelerateInterpolator(1.5f))
+                    .start();
+            updatePreviewPosition(lastX, lastY);
+            log("linear menu restored pointerY=" + Math.round(lastY)
+                    + " menuTop=" + menuTop);
+            menuView.post(() -> updateSelectedTarget(lastX, lastY));
+            return;
+        }
+        if (isModernStyle() && modernMenuView != null
+                && ((modernMenuWindow != null && modernMenuWindow.isShowing())
+                || menuView.isAttachedToWindow())) {
+            menuShown = true;
+            if (modernMenuWindow != null) {
+                modernMenuWindow.showAnimated();
+            } else {
+                modernMenuView.showAnimated();
+            }
+            updatePreviewPosition(lastX, lastY);
+            log("modern menu shown pointerY=" + Math.round(lastY) + " menuTop=" + menuTop);
+            menuView.post(() -> updateSelectedTarget(lastX, lastY));
+            return;
+        }
         try {
-            windowManager.addView(menuView, menuParams);
+            if (isModernStyle() && modernMenuWindow != null) {
+                modernMenuWindow.showAnimated();
+            } else {
+                windowManager.addView(menuView, menuParams);
+            }
             menuShown = true;
             updatePreviewPosition(lastX, lastY);
             log("menu shown pointerY=" + Math.round(lastY) + " menuTop=" + menuTop);
@@ -1115,6 +1304,10 @@ final class DragShareController {
                     log("portal glow expanded with share tray");
                 }
                 startPortalMenuEnterAnimation();
+            } else if (isModernStyle() && modernMenuView != null) {
+                if (modernMenuWindow == null) {
+                    modernMenuView.showAnimated();
+                }
             } else {
                 menuView.setAlpha(0f);
                 menuView.setTranslationX(isVerticalSimpleMenu()
@@ -1186,6 +1379,17 @@ final class DragShareController {
             selectedTarget = hit;
             if (circleMenuView != null) {
                 circleMenuView.setSelectedTarget(hit);
+            }
+            return;
+        }
+        if (isModernStyle()) {
+            ShareTarget hit = menuShown && isPointerInsideSimpleMenu(x, y)
+                    && modernMenuView != null
+                    ? modernMenuView.hitTest(x, y)
+                    : null;
+            selectedTarget = hit;
+            if (modernMenuView != null) {
+                modernMenuView.setSelectedTarget(hit);
             }
             return;
         }
@@ -1289,7 +1493,7 @@ final class DragShareController {
         } else if (finished != null && finished.pendingTarget == null) {
             finished.cancelled = true;
         }
-        removeGestureViews();
+        removeGestureViews(true);
     }
 
     private void cancelGestureOnMain() {
@@ -1299,7 +1503,7 @@ final class DragShareController {
         active = false;
         stopEdgeScroll();
         backgroundTouchBlocker.stop();
-        removeGestureViews();
+        removeGestureViews(true);
         if (session != null && session.pendingTarget == null) {
             session.cancelled = true;
         }
@@ -1448,11 +1652,7 @@ final class DragShareController {
                     topInset + dp(8),
                     Math.max(topInset + dp(8),
                             screenHeight - bottomInset - previewHeight - dp(8)));
-            try {
-                windowManager.updateViewLayout(previewView, previewParams);
-            } catch (Throwable ignored) {
-                // The host may be tearing down its service at the same time.
-            }
+            updateOverlayLayout(previewView, modernPreviewWindow, previewParams);
             return;
         }
         int margin = dp(settings.simpleMenuEdgeDistanceDp);
@@ -1477,8 +1677,22 @@ final class DragShareController {
                 Math.round(x - previewWidth / 2f), minLeft, maxLeft);
         previewParams.y = GestureMath.clamp(
                 Math.round(y - previewHeight - dp(20)), minTop, maxTop);
+        updateOverlayLayout(previewView, modernPreviewWindow, previewParams);
+    }
+
+    private void updateOverlayLayout(
+            View view,
+            ModernOverlayWindow modernWindow,
+            WindowManager.LayoutParams params) {
+        if (view == null || params == null) {
+            return;
+        }
         try {
-            windowManager.updateViewLayout(previewView, previewParams);
+            if (modernWindow != null) {
+                modernWindow.updateLayout();
+            } else {
+                windowManager.updateViewLayout(view, params);
+            }
         } catch (Throwable ignored) {
             // The host may be tearing down its service at the same time.
         }
@@ -1550,9 +1764,15 @@ final class DragShareController {
                     : Math.max(0, screenWidth - menuWidth - menuMargin);
             menuTriggerTop = menuTop;
         } else {
-            menuWidth = screenWidth;
+            int horizontalInset = isModernStyle()
+                    && simpleMenuPosition == DragShareSettings.SIMPLE_MENU_POSITION_BOTTOM
+                    ? Math.min(
+                            dp(MODERN_BOTTOM_MENU_SIDE_MARGIN_DP),
+                            Math.max(0, (screenWidth - 1) / 2))
+                    : 0;
+            menuWidth = Math.max(1, screenWidth - horizontalInset * 2);
             menuHeight = dp(MENU_HEIGHT_DP);
-            menuLeft = 0;
+            menuLeft = horizontalInset;
             if (simpleMenuPosition == DragShareSettings.SIMPLE_MENU_POSITION_TOP) {
                 menuTop = topInset + menuMargin;
                 menuTriggerTop = menuTop + dp(MENU_TRIGGER_DP);
@@ -1584,27 +1804,31 @@ final class DragShareController {
     }
 
     private void removeGestureViews() {
+        removeGestureViews(false);
+    }
+
+    private void removeGestureViews(boolean animatePreviewExit) {
         unregisterNearHandSensor();
-        if (previewView != null) {
+        cancelModernMenuDispose();
+        cancelLinearMenuFadeOut();
+        if (!animatePreviewExit) {
+            removePendingPreviewExitImmediately();
+        }
+        if (previewView != null && !animatePreviewExit) {
             previewView.animate().cancel();
+        }
+        if (menuView != null) {
+            menuView.animate().cancel();
         }
         for (View item : menuItems) {
             item.animate().cancel();
         }
-        if (previewView != null) {
-            try {
-                windowManager.removeViewImmediate(previewView);
-            } catch (Throwable ignored) {
-                // Already removed.
-            }
+        if (animatePreviewExit && previewView != null) {
+            startPreviewExit(previewView, modernPreviewView, modernPreviewWindow);
+        } else {
+            removeOverlayView(previewView, modernPreviewView, modernPreviewWindow);
         }
-        if (menuView != null) {
-            try {
-                windowManager.removeViewImmediate(menuView);
-            } catch (Throwable ignored) {
-                // Already removed or never attached.
-            }
-        }
+        removeOverlayView(menuView, modernMenuView, modernMenuWindow);
         if (glowView != null) {
             glowView.stop();
             try {
@@ -1623,10 +1847,17 @@ final class DragShareController {
             }
         }
         previewView = null;
+        modernPreviewView = null;
+        modernPreviewWindow = null;
         previewParams = null;
         glowView = null;
         glowParams = null;
         menuView = null;
+        modernMenuView = null;
+        modernMenuWindow = null;
+        modernMenuDisposeRunnable = null;
+        fadingLinearMenuView = null;
+        modernPreviewEnterStarted = false;
         menuParams = null;
         menuScroll = null;
         menuVerticalScroll = null;
@@ -1644,6 +1875,208 @@ final class DragShareController {
         menuWidth = 0;
     }
 
+    private void removeOverlayView(
+            View view,
+            ModernOverlayComposeView modernOverlay,
+            ModernOverlayWindow modernWindow) {
+        if (modernWindow != null) {
+            modernWindow.dispose();
+            return;
+        }
+        if (view != null) {
+            try {
+                windowManager.removeViewImmediate(view);
+            } catch (Throwable ignored) {
+                // Already removed or never attached.
+            }
+        }
+        if (modernOverlay != null) {
+            modernOverlay.disposeOverlay();
+        }
+    }
+
+    private void startPreviewExit(
+            View previewToFade,
+            ModernPreviewOverlayView modernPreviewToFade,
+            ModernOverlayWindow modernWindowToFade) {
+        removePendingPreviewExitImmediately();
+        final int generation = ++previewExitGeneration;
+        exitingPreviewView = previewToFade;
+        exitingModernPreviewView = modernPreviewToFade;
+        exitingModernPreviewWindow = modernWindowToFade;
+
+        if (modernWindowToFade != null) {
+            modernWindowToFade.hideAnimated(
+                    MODERN_OVERLAY_EXIT_DURATION_MS,
+                    () -> finishPreviewExit(
+                            generation,
+                            previewToFade,
+                            modernPreviewToFade,
+                            modernWindowToFade));
+            return;
+        }
+        if (modernPreviewToFade != null) {
+            modernPreviewToFade.hideAnimated();
+            mainHandler.postDelayed(
+                    () -> finishPreviewExit(
+                            generation,
+                            previewToFade,
+                            modernPreviewToFade,
+                            null),
+                    MODERN_OVERLAY_EXIT_DURATION_MS);
+            return;
+        }
+
+        previewToFade.animate().cancel();
+        previewToFade.animate()
+                .alpha(0f)
+                .scaleX(Math.max(0f, previewToFade.getScaleX() * 0.96f))
+                .scaleY(Math.max(0f, previewToFade.getScaleY() * 0.96f))
+                .setDuration(PREVIEW_EXIT_DURATION_MS)
+                .setInterpolator(new DecelerateInterpolator(1.5f))
+                .withEndAction(() -> finishPreviewExit(
+                        generation,
+                        previewToFade,
+                        null,
+                        null))
+                .start();
+    }
+
+    private void finishPreviewExit(
+            int generation,
+            View previewToRemove,
+            ModernPreviewOverlayView modernPreviewToRemove,
+            ModernOverlayWindow modernWindowToRemove) {
+        if (generation != previewExitGeneration
+                || exitingPreviewView != previewToRemove
+                || exitingModernPreviewView != modernPreviewToRemove
+                || exitingModernPreviewWindow != modernWindowToRemove) {
+            return;
+        }
+        exitingPreviewView = null;
+        exitingModernPreviewView = null;
+        exitingModernPreviewWindow = null;
+        removeOverlayView(previewToRemove, modernPreviewToRemove, modernWindowToRemove);
+    }
+
+    private boolean isPreviewExitPending() {
+        return exitingPreviewView != null;
+    }
+
+    private void removePendingPreviewExitImmediately() {
+        previewExitGeneration++;
+        View previewToRemove = exitingPreviewView;
+        ModernPreviewOverlayView modernPreviewToRemove = exitingModernPreviewView;
+        ModernOverlayWindow modernWindowToRemove = exitingModernPreviewWindow;
+        exitingPreviewView = null;
+        exitingModernPreviewView = null;
+        exitingModernPreviewWindow = null;
+        if (previewToRemove != null) {
+            previewToRemove.animate().cancel();
+        }
+        removeOverlayView(previewToRemove, modernPreviewToRemove, modernWindowToRemove);
+    }
+
+    private void scheduleModernMenuDispose(
+            ModernMenuOverlayView menuToDispose,
+            ModernOverlayWindow windowToDispose) {
+        cancelModernMenuDispose();
+        Runnable disposeRunnable = () -> {
+            if (menuShown || modernMenuView != menuToDispose) {
+                return;
+            }
+            if (windowToDispose != null) {
+                windowToDispose.dispose();
+            } else {
+                try {
+                    windowManager.removeViewImmediate(menuToDispose);
+                } catch (Throwable ignored) {
+                    // The overlay can already be gone while the host tears down its window.
+                }
+                menuToDispose.disposeOverlay();
+            }
+            if (menuView == menuToDispose) {
+                menuView = null;
+                modernMenuView = null;
+                modernMenuWindow = null;
+                menuParams = null;
+            }
+        };
+        modernMenuDisposeRunnable = disposeRunnable;
+        if (windowToDispose != null) {
+            windowToDispose.hideAnimated(
+                    MODERN_OVERLAY_EXIT_DURATION_MS,
+                    () -> {
+                        if (modernMenuDisposeRunnable == disposeRunnable) {
+                            disposeRunnable.run();
+                        }
+                    });
+        } else {
+            menuToDispose.hideAnimated();
+            mainHandler.postDelayed(disposeRunnable, MODERN_OVERLAY_EXIT_DURATION_MS);
+        }
+    }
+
+    private void cancelModernMenuDispose() {
+        if (modernMenuDisposeRunnable != null) {
+            mainHandler.removeCallbacks(modernMenuDisposeRunnable);
+            modernMenuDisposeRunnable = null;
+        }
+    }
+
+    private void fadeOutLinearMenu(View menuToFade) {
+        if (menuToFade == null) {
+            return;
+        }
+        cancelLinearMenuFadeOut();
+        final int generation = ++linearMenuFadeGeneration;
+        fadingLinearMenuView = menuToFade;
+        menuToFade.animate().cancel();
+        menuToFade.animate()
+                .alpha(0f)
+                .setDuration(LINEAR_MENU_EXIT_DURATION_MS)
+                .setInterpolator(new DecelerateInterpolator(1.5f))
+                .withEndAction(() -> {
+                    if (generation != linearMenuFadeGeneration
+                            || fadingLinearMenuView != menuToFade) {
+                        return;
+                    }
+                    fadingLinearMenuView = null;
+                    if (menuView == menuToFade && menuShown) {
+                        return;
+                    }
+                    removeLinearMenuImmediately(menuToFade);
+                })
+                .start();
+    }
+
+    private void cancelLinearMenuFadeOut(View menuToRestore) {
+        if (fadingLinearMenuView == menuToRestore) {
+            cancelLinearMenuFadeOut();
+        }
+    }
+
+    private void cancelLinearMenuFadeOut() {
+        linearMenuFadeGeneration++;
+        View fading = fadingLinearMenuView;
+        fadingLinearMenuView = null;
+        if (fading != null) {
+            fading.animate().cancel();
+        }
+    }
+
+    private void removeLinearMenuImmediately(View menuToRemove) {
+        if (menuToRemove == null) {
+            return;
+        }
+        menuToRemove.animate().cancel();
+        try {
+            windowManager.removeViewImmediate(menuToRemove);
+        } catch (Throwable ignored) {
+            // The overlay may already have been removed by the host.
+        }
+    }
+
     private void stopEdgeScroll() {
         edgeDirection = 0;
         circleScrollDirection = 0;
@@ -1657,6 +2090,10 @@ final class DragShareController {
 
     private boolean isCircleStyle() {
         return settings != null && settings.uiStyle == DragShareSettings.STYLE_CIRCLE;
+    }
+
+    private boolean isModernStyle() {
+        return settings != null && settings.uiStyle == DragShareSettings.STYLE_MODERN;
     }
 
     private void startBackgroundBlockerIfEnabled() {
@@ -1683,20 +2120,7 @@ final class DragShareController {
     }
 
     private Drawable iconForTarget(ShareTarget target) {
-        Drawable icon = target == null ? null : target.icon;
-        if (target == null) {
-            return icon;
-        }
-        if (target.isSaveToLocal()) {
-            return new SaveTargetIconDrawable(icon, palette.accent);
-        }
-        if (target.isCopyToClipboard()) {
-            return new CopyTargetIconDrawable(icon, palette.accent);
-        }
-        if (target.isTextSegmentation()) {
-            return new TextSegmentationTargetIconDrawable(icon, palette.accent);
-        }
-        return icon;
+        return ShareTargetRepository.iconForDisplay(target);
     }
 
     private static int applyAbsoluteOpacity(int color, int percent) {

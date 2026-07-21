@@ -63,6 +63,12 @@ public final class DragShareSettingsTest {
         assertEquals(
                 DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT,
                 settings.iconOpacityPercent);
+        assertEquals(
+                DragShareSettings.DEFAULT_MODERN_BLUR_RADIUS_DP,
+                settings.modernBlurRadiusDp);
+        assertEquals(
+                DragShareSettings.DEFAULT_MODERN_GLASS_OPACITY_PERCENT,
+                settings.modernGlassOpacityPercent);
         assertTrue(settings.closeMenuWhenPointerLeaves);
         assertTrue(settings.hiddenTargetKeys.isEmpty());
         assertTrue(settings.targetOrder.isEmpty());
@@ -125,6 +131,48 @@ public final class DragShareSettingsTest {
                 false);
 
         assertEquals(DragShareSettings.STYLE_CIRCLE, settings.uiStyle);
+    }
+
+    @Test
+    public void modernStyleAndBlurParametersAreClampedAndRoundTrip() {
+        DragShareSettings settings = new DragShareSettings(
+                DragShareSettings.COLOR_DARK,
+                DragShareSettings.STYLE_MODERN,
+                DragShareSettings.DEFAULT_EDGE_TRIGGER_DP,
+                DragShareSettings.DEFAULT_SCROLL_SPEED_DP_PER_SECOND,
+                false,
+                true,
+                true,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_POSITION,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_OPACITY_PERCENT,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_CORNER_RADIUS_DP,
+                DragShareSettings.DEFAULT_SIMPLE_MENU_EDGE_DISTANCE_DP,
+                DragShareSettings.DEFAULT_ICON_OPACITY_PERCENT,
+                true,
+                new LinkedHashSet<>(),
+                Arrays.asList(),
+                DragShareSettings.CONTENT_CAPTURE_PORTAL,
+                false,
+                new LinkedHashSet<>(),
+                DragShareSettings.DEFAULT_ACCESSIBILITY_LONG_PRESS_TIMEOUT_MILLIS,
+                DragShareSettings.DEFAULT_ACCESSIBILITY_RECOGNITION_SENSITIVITY_PERCENT,
+                true,
+                true,
+                true,
+                Integer.MAX_VALUE,
+                Integer.MIN_VALUE);
+
+        assertTrue(settings.isModernStyle());
+        assertEquals(
+                DragShareSettings.MAX_MODERN_BLUR_RADIUS_DP,
+                settings.modernBlurRadiusDp);
+        assertEquals(
+                DragShareSettings.MIN_MODERN_GLASS_OPACITY_PERCENT,
+                settings.modernGlassOpacityPercent);
+        DragShareSettings fromBundle = DragShareSettings.fromBundle(settings.toBundle());
+        assertEquals(DragShareSettings.STYLE_MODERN, fromBundle.uiStyle);
+        assertEquals(settings.modernBlurRadiusDp, fromBundle.modernBlurRadiusDp);
+        assertEquals(settings.modernGlassOpacityPercent, fromBundle.modernGlassOpacityPercent);
     }
 
     @Test

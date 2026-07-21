@@ -12,9 +12,12 @@ final class OverlayWindowPolicy {
         this.sourceName = sourceName;
     }
 
+    @SuppressWarnings("deprecation")
     static OverlayWindowPolicy portal() {
+        // Taplus is granted INTERNAL_SYSTEM_WINDOW. On the verified HyperOS device, the
+        // same OPAQUE alpha=1 probe remains solid only on this window type, not TYPE_PHONE.
         return new OverlayWindowPolicy(
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG,
                 "portal");
     }
 

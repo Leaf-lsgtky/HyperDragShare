@@ -9,7 +9,7 @@
 ## 工程基线
 
 - 工程类型：Android LSPosed 模块，Java/Kotlin 17，minSdk 33，targetSdk 34，compileSdk 37。
-- 当前版本：`1.7.20`，`versionCode 44`。
+- 当前版本：`1.7.40`，`versionCode 64`。
 - 已验证宿主：传送门 `4.2.1`，包名 `com.miui.contentextension`。
 - LSPosed API：82，入口为 `com.leaf.hyperdragshare.codex.MainHook`。
 - 可靠的同手势跟手依赖 root 读取 Linux evdev；MIUI 输入监听仅作回退。
@@ -47,7 +47,7 @@
    都必须释放 `InputMonitor`（若 ROM 走 monitor 回退）。
 10. 近手方向的物理映射是“左高右低显示在右边，右高左低显示在左边”。菜单第一次展开后
     必须锁定该侧并注销传感器，直到本次手势结束；不要在菜单暂时收起后重新选边。
-11. “手指移开时关闭分享菜单”是三种拖拽样式的公共行为。简洁/流光离开菜单与触发带时移除
+11. “手指移开时关闭分享菜单”是四种拖拽样式的公共行为。简洁/现代/流光离开菜单与触发带时移除
     线性菜单，环形离开展开面板区域时折叠；同一手势重新进入触发区后都应允许再次展开。
 12. 首页激活状态必须按当前来源解释：传送门模式按“无 Root → 当前版本未注入传送门 → 已激活”，
     无障碍模式按“无 Root → 服务未启用 → 服务/Root 输入连接中 → 已激活”。传送门 Hook 必须通过
@@ -59,6 +59,10 @@
     `MiuiMotionSource` 使用传送门私有/Xposed 接口。
 14. 无障碍节点树只允许在一次长按超时后读取。不得在 `onAccessibilityEvent()` 中持续遍历、
     截图或记录文字；密码节点、锁屏和无障碍覆盖层必须被忽略，图片只截取已选择的节点区域。
+15. 未经用户在当前轮明确授权，自动化代理不得自行启动、切换或操控任何设备/桌面应用（包括
+    `adb shell am start`、`monkey`、`input` 和 GUI 自动化），也不得自行执行设备或本地截图
+    （包括 `screencap`、`adb exec-out screencap`、`PixelCopy`）。可读取用户主动提供的截图；
+    此约束不改变模块运行时为现代悬浮 View 使用原生局部背景模糊的实现。
 
 ## 代码地图
 
@@ -70,6 +74,7 @@
 - `DragShareController.java`：拖拽会话、悬浮预览、方向菜单、边缘滚动、近手传感器和落点选择；不依赖 Xposed。
 - `PortalGlowView.java`：流光样式的全屏不可触摸光效、下拉进度和托盘展开绘制。
 - `CircleMenuOverlayView.java`、`CircleMenuGeometry.java`：按 JADX MCP 圆菜单类重建的左右贴边半圆样式。
+- `ModernOverlayViews.kt`、`ModernOverlayWindow.java`、`ModernPreviewSizer.java`：现代 Compose 内容、View outline、公开 Window 局部背景模糊和自适应正方形预览。
 - `DragShareSettings.java`：设置默认值、范围校验、本地持久化和 Provider 配置 RPC。
 - `BackgroundTouchBlocker.java`、`FrameworkBinderTransactionResolver.java`：可选地通过系统手势监视器取消原前台窗口的触摸流；直接 API 被拒绝或被隐藏 API 策略屏蔽时，从当前 ROM 的 framework DEX 动态解析输入 Binder 事务号并以 root 回退，失败时旁路观察。
 - `SettingsScreen.kt`：Miuix 设置页（内容开关、目标可见性、批量操作、拖拽排序、外观和触摸参数）。
@@ -79,8 +84,7 @@
 - `DragShareAccessibilityService.java`、`AccessibilityContentCaptureSource.java`：无障碍生命周期、长按协调和来源隔离。
 - `LongPressGestureDetector.java`、`AccessibilityNodeClassifier.java`、`AccessibilityCandidateSelector.java`：可单测的长按、节点分类和命中优先级。
 - `AccessibilityScreenshotter.java`、`RootScreenshotter.java`、`ScreenshotRectMapper.java`：安全的一次性区域截图与 API 28/29 回退。
-- `ShareTargetRepository.java`：查询可处理对应 MIME 的导出 Activity。
-- `SaveTargetIconDrawable.java`：强调色应用图标瓷片、模块 Miuix Download 图案与无资源兜底。
+- `ShareTargetRepository.java`：查询可处理对应 MIME 的导出 Activity，并克隆/着色内置目标的旧矢量图标。
 - `BitmapEncoder.java`、`ImageStagingClient.java`、`ShareImageProvider.java`：图片压缩、
   跨 UID 暂存、能力 URI 和授权。
 - `LocalImageSaver.java`：把图片首项保存到系统 Pictures，按秒生成文件名。
@@ -99,7 +103,7 @@
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug
 ```
 
-当前应有 63 个单元测试通过，APK 输出到
+当前应有 71 个单元测试通过，APK 输出到
 `app\build\outputs\apk\debug\app-debug.apk`。交付新的可安装行为时同步递增
 `versionCode` 和 `versionName`；纯文档修改不要求增版。
 

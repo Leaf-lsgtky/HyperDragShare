@@ -18,6 +18,7 @@ import java.util.Set;
 
 final class ShareTargetRepository {
     private static final String MODULE_PACKAGE = "com.leaf.hyperdragshare.codex";
+    static final int BUILT_IN_ACTION_TILE_COLOR = 0xFF3482FF;
 
     private ShareTargetRepository() {}
 
@@ -186,6 +187,25 @@ final class ShareTargetRepository {
 
     static Drawable loadTextSegmentationIcon(Context context) {
         return loadBuiltInIcon(context, R.drawable.ic_text_segment);
+    }
+
+    /** Returns a visually consistent icon for every menu and settings surface. */
+    static Drawable iconForDisplay(ShareTarget target) {
+        if (target == null) {
+            return null;
+        }
+        if (target.isCopyToClipboard()) {
+            return new CopyTargetIconDrawable(target.icon, BUILT_IN_ACTION_TILE_COLOR);
+        }
+        if (target.isSaveToLocal()) {
+            return new SaveTargetIconDrawable(target.icon, BUILT_IN_ACTION_TILE_COLOR);
+        }
+        if (target.isTextSegmentation()) {
+            return new TextSegmentationTargetIconDrawable(
+                    target.icon,
+                    BUILT_IN_ACTION_TILE_COLOR);
+        }
+        return target.icon;
     }
 
     private static Drawable loadBuiltInIcon(Context context, int resourceId) {
