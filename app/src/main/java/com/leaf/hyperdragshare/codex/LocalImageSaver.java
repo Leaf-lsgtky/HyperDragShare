@@ -13,15 +13,15 @@ import android.provider.MediaStore;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/** Copies a captured or staged image into the user's Pictures collection. */
+/** Copies a captured image into the user's Pictures collection. */
 final class LocalImageSaver {
     private static final String DIRECTORY_NAME = "HyperDragShare";
+    private static final String MIME_PNG = "image/png";
 
     private LocalImageSaver() {}
 
@@ -29,41 +29,16 @@ final class LocalImageSaver {
         if (context == null || bitmap == null || bitmap.isRecycled()) {
             throw new IOException("Image is unavailable");
         }
-        return save(context, output -> {
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)) {
-                throw new IOException("Unable to encode image");
-            }
-        });
-    }
-
-    static Uri save(Context context, Uri source) throws IOException {
-        if (context == null || source == null) {
-            throw new IOException("Image URI is unavailable");
-        }
-        return save(context, output -> {
-            try (InputStream input = context.getContentResolver().openInputStream(source)) {
-                if (input == null) {
-                    throw new IOException("Unable to open staged image");
-                }
-                byte[] buffer = new byte[64 * 1024];
-                long total = 0L;
-                int read;
-                while ((read = input.read(buffer)) >= 0) {
-                    if (read > 0) {
-                        output.write(buffer, 0, read);
-                        total += read;
-                    }
-                }
-                if (total == 0L) {
-                    throw new IOException("Staged image is empty");
-                }
-            }
-        });
+        return save(context, output -> writePng(bitmap, output));
     }
 
     static String timestampName(long timestampMillis) {
         return new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
-                .format(new Date(timestampMillis)) + ".jpg";
+                .format(new Date(timestampMillis)) + ".png";
+    }
+
+    static void writePng(Bitmap bitmap, OutputStream output) throws IOException {
+        BitmapEncoder.writePng(bitmap, output);
     }
 
     private static Uri save(Context context, OutputWriter writer) throws IOException {
@@ -81,7 +56,7 @@ final class LocalImageSaver {
         ContentResolver resolver = context.getContentResolver();
         ContentValues values = new ContentValues();
         values.put(MediaStore.Images.Media.DISPLAY_NAME, displayName);
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        values.put(MediaStore.Images.Media.MIME_TYPE, MIME_PNG);
         values.put(
                 MediaStore.Images.Media.RELATIVE_PATH,
                 Environment.DIRECTORY_PICTURES + File.separator + DIRECTORY_NAME);
@@ -140,7 +115,7 @@ final class LocalImageSaver {
         MediaScannerConnection.scanFile(
                 context,
                 new String[]{destination.getAbsolutePath()},
-                new String[]{"image/jpeg"},
+                new String[]{MIME_PNG},
                 null);
         return Uri.fromFile(destination);
     }

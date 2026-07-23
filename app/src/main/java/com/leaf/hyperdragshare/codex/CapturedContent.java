@@ -61,6 +61,6 @@ final class CapturedContent {
     }
 
     String mimeType() {
-        return isImage() ? "image/jpeg" : "text/plain";
+        return isImage() ? "image/png" : "text/plain";
     }
 }

@@ -4,9 +4,12 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 final class ImageStagingClient {
     interface Callback {
@@ -20,12 +23,14 @@ final class ImageStagingClient {
     static final String METHOD_STAGE = "stage_image";
     static final String METHOD_GRANT = "grant_image";
     static final String METHOD_REVOKE = "revoke_image";
+    /** Legacy byte-array input accepted by the Provider during process upgrades. */
     static final String EXTRA_BYTES = "bytes";
+    static final String EXTRA_STREAM = "stream";
     static final String EXTRA_PACKAGE = "package";
     static final String RESULT_URI = "uri";
     static final String RESULT_GRANTED = "granted";
 
-    private static final int MAX_BINDER_PAYLOAD = 700 * 1024;
+    private static final long ENCODER_JOIN_TIMEOUT_MS = 60_000L;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "drag-share-image-stage");
         thread.setDaemon(true);
@@ -37,23 +42,91 @@ final class ImageStagingClient {
     static void stage(Context context, Bitmap bitmap, Callback callback) {
         EXECUTOR.execute(() -> {
             try {
-                byte[] bytes = BitmapEncoder.encodeJpeg(bitmap, MAX_BINDER_PAYLOAD);
-                if (bytes.length == 0 || bytes.length > MAX_BINDER_PAYLOAD) {
-                    throw new IllegalStateException("Unable to fit image in Binder transaction");
-                }
-                Bundle extras = new Bundle();
-                extras.putByteArray(EXTRA_BYTES, bytes);
-                Bundle result = context.getContentResolver().call(
-                        BASE_URI, METHOD_STAGE, null, extras);
-                String uriValue = result == null ? null : result.getString(RESULT_URI);
-                if (uriValue == null) {
-                    throw new IllegalStateException("Image provider returned no URI");
-                }
-                callback.onStaged(Uri.parse(uriValue));
+                callback.onStaged(stagePng(context, bitmap));
             } catch (Throwable error) {
                 callback.onFailure(error);
             }
         });
+    }
+
+    private static Uri stagePng(Context context, Bitmap bitmap) throws Throwable {
+        if (context == null || bitmap == null || bitmap.isRecycled()) {
+            throw new IllegalArgumentException("Bitmap is unavailable");
+        }
+        ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
+        ParcelFileDescriptor readSide = pipe[0];
+        ParcelFileDescriptor writeSide = pipe[1];
+        AtomicReference<Throwable> encoderFailure = new AtomicReference<>();
+        Thread encoder = new Thread(() -> {
+            try (ParcelFileDescriptor.AutoCloseOutputStream output =
+                         new ParcelFileDescriptor.AutoCloseOutputStream(writeSide)) {
+                BitmapEncoder.writePng(bitmap, output);
+            } catch (Throwable error) {
+                encoderFailure.set(error);
+            }
+        }, "drag-share-png-encoder");
+        encoder.setDaemon(true);
+        encoder.start();
+
+        Bundle result = null;
+        Throwable providerFailure = null;
+        try {
+            Bundle extras = new Bundle();
+            extras.putParcelable(EXTRA_STREAM, readSide);
+            result = context.getContentResolver().call(
+                    BASE_URI, METHOD_STAGE, null, extras);
+        } catch (Throwable error) {
+            providerFailure = error;
+        } finally {
+            closeQuietly(readSide);
+        }
+
+        Throwable writeFailure = waitForEncoder(encoder, writeSide, encoderFailure);
+        if (providerFailure != null) {
+            if (writeFailure != null && writeFailure != providerFailure) {
+                providerFailure.addSuppressed(writeFailure);
+            }
+            throw providerFailure;
+        }
+        if (writeFailure != null) {
+            throw writeFailure;
+        }
+        String uriValue = result == null ? null : result.getString(RESULT_URI);
+        if (uriValue == null) {
+            throw new IllegalStateException("Image provider returned no URI");
+        }
+        return Uri.parse(uriValue);
+    }
+
+    private static Throwable waitForEncoder(
+            Thread encoder,
+            ParcelFileDescriptor writeSide,
+            AtomicReference<Throwable> encoderFailure) {
+        try {
+            encoder.join(ENCODER_JOIN_TIMEOUT_MS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            closeQuietly(writeSide);
+            encoder.interrupt();
+            return new IOException("PNG encoding interrupted", interrupted);
+        }
+        if (encoder.isAlive()) {
+            closeQuietly(writeSide);
+            encoder.interrupt();
+            return new IOException("PNG encoding timed out");
+        }
+        return encoderFailure.get();
+    }
+
+    private static void closeQuietly(ParcelFileDescriptor descriptor) {
+        if (descriptor == null) {
+            return;
+        }
+        try {
+            descriptor.close();
+        } catch (IOException ignored) {
+            // The paired stream can already have closed the descriptor.
+        }
     }
 
     static void grantReadAccess(Context context, Uri uri, String packageName) {

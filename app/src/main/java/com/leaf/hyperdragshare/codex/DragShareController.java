@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Outline;
@@ -1550,6 +1551,7 @@ final class DragShareController {
         // the user-selected launch, then clean it up in the same main-thread turn.
         if (allowShare && target != null && finished != null) {
             if (!finished.payload.isImage()
+                    || target.isSaveToLocal()
                     || finished.stagedUri != null) {
                 launchShare(finished, target);
             } else {
@@ -1577,7 +1579,8 @@ final class DragShareController {
 
     private void launchPendingShare(Session pendingSession) {
         ShareTarget target = pendingSession.pendingTarget;
-        if (target == null || pendingSession.stagedUri == null) {
+        if (target == null
+                || (pendingSession.stagedUri == null && !target.isSaveToLocal())) {
             return;
         }
         pendingSession.pendingTarget = null;
@@ -1586,7 +1589,7 @@ final class DragShareController {
 
     private void launchShare(Session shareSession, ShareTarget target) {
         if (target.isSaveToLocal()) {
-            saveImageLocally(shareSession.stagedUri);
+            saveImageLocally(shareSession.payload.bitmap);
             shareSession.cancelled = true;
             return;
         }
@@ -1665,15 +1668,15 @@ final class DragShareController {
         }
     }
 
-    private void saveImageLocally(Uri stagedImage) {
-        if (stagedImage == null) {
+    private void saveImageLocally(Bitmap bitmap) {
+        if (bitmap == null || bitmap.isRecycled()) {
             showToast("保存图片失败");
             return;
         }
         Thread worker = new Thread(() -> {
             try {
-                LocalImageSaver.save(context, stagedImage);
-                log("saved image");
+                LocalImageSaver.save(context, bitmap);
+                log("saved image as PNG");
                 traceAccessibility("local save succeeded");
                 mainHandler.post(() -> showToast("已保存到本地", android.widget.Toast.LENGTH_LONG));
             } catch (Throwable error) {

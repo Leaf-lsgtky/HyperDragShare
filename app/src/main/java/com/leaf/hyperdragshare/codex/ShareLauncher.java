@@ -28,7 +28,7 @@ final class ShareLauncher {
                 }
                 intent.setDataAndType(stagedImage, payload.mimeType());
                 intent.putExtra(Intent.EXTRA_STREAM, stagedImage);
-                intent.putExtra(Intent.EXTRA_TITLE, "drag-share.jpg");
+                intent.putExtra(Intent.EXTRA_TITLE, "drag-share.png");
                 intent.setClipData(ClipData.newUri(
                         context.getContentResolver(), "drag-share-image", stagedImage));
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

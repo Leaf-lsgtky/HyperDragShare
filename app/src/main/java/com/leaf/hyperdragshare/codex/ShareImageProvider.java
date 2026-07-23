@@ -18,12 +18,15 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.UUID;
 
 public final class ShareImageProvider extends ContentProvider {
     private static final String TAG = "DragShareProvider";
+    private static final String MIME_PNG = "image/png";
+    private static final String MIME_JPEG = "image/jpeg";
     private static final long MAX_CACHE_AGE_MS = 24L * 60L * 60L * 1000L;
-    private static final int MAX_FILE_BYTES = 750 * 1024;
+    private static final long MAX_FILE_BYTES = 32L * 1024L * 1024L;
 
     private File shareDirectory;
 
@@ -59,38 +62,85 @@ public final class ShareImageProvider extends ContentProvider {
             return super.call(method, arg, extras);
         }
         enforcePortalCaller();
+        return stageImage(extras);
+    }
+
+    private Bundle stageImage(Bundle extras) {
         if (extras == null) {
-            throw new IllegalArgumentException("Missing image bytes");
+            throw new IllegalArgumentException("Missing image data");
         }
+        ParcelFileDescriptor stream = extras.getParcelable(
+                ImageStagingClient.EXTRA_STREAM,
+                ParcelFileDescriptor.class);
         byte[] bytes = extras.getByteArray(ImageStagingClient.EXTRA_BYTES);
-        if (bytes == null || bytes.length == 0 || bytes.length > MAX_FILE_BYTES) {
+        boolean png = stream != null;
+        if (!png && (bytes == null || bytes.length == 0 || bytes.length > MAX_FILE_BYTES)) {
             throw new IllegalArgumentException("Invalid staged image size");
         }
 
         cleanupExpiredFiles();
         String token = UUID.randomUUID().toString();
+        String suffix = png ? ShareUriToken.PNG_SUFFIX : ShareUriToken.JPEG_SUFFIX;
         File temporary = new File(shareDirectory, token + ".tmp");
-        File destination = fileForToken(token);
+        File destination = fileForToken(token, suffix);
+        long written;
         try (FileOutputStream output = new FileOutputStream(temporary)) {
-            output.write(bytes);
+            if (stream != null) {
+                try (InputStream input =
+                             new ParcelFileDescriptor.AutoCloseInputStream(stream)) {
+                    written = copyImage(input, output);
+                }
+            } else {
+                output.write(bytes);
+                written = bytes.length;
+            }
             output.getFD().sync();
         } catch (IOException error) {
             temporary.delete();
             throw new IllegalStateException("Unable to stage shared image", error);
+        } finally {
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException ignored) {
+                    // AutoCloseInputStream normally owns this descriptor.
+                }
+            }
         }
         if (!temporary.renameTo(destination)) {
             temporary.delete();
             throw new IllegalStateException("Unable to publish staged image");
         }
 
-        Uri uri = uriForToken(token);
+        Uri uri = uriForToken(token, suffix);
         grantReadAccessAsOwner(
                 MainHook.TAPLUS_PACKAGE,
                 uri);
-        DragShareLog.i(TAG, "staged bytes=" + bytes.length);
+        DragShareLog.i(TAG, "staged format=" + (png ? "png" : "jpeg")
+                + " bytes=" + written);
         Bundle result = new Bundle();
         result.putString(ImageStagingClient.RESULT_URI, uri.toString());
         return result;
+    }
+
+    private static long copyImage(InputStream input, FileOutputStream output) throws IOException {
+        byte[] buffer = new byte[64 * 1024];
+        long total = 0L;
+        int read;
+        while ((read = input.read(buffer)) >= 0) {
+            if (read == 0) {
+                continue;
+            }
+            total += read;
+            if (total > MAX_FILE_BYTES) {
+                throw new IOException("Staged PNG exceeds size limit");
+            }
+            output.write(buffer, 0, read);
+        }
+        if (total == 0L) {
+            throw new IOException("Staged PNG is empty");
+        }
+        return total;
     }
 
     @Override
@@ -108,7 +158,8 @@ public final class ShareImageProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        return resolveToken(uri) == null ? null : "image/jpeg";
+        String suffix = resolveSuffix(uri);
+        return suffix == null ? null : mimeTypeForSuffix(suffix);
     }
 
     @Override
@@ -130,11 +181,14 @@ public final class ShareImageProvider extends ContentProvider {
         for (String column : columns) {
             if (OpenableColumns.DISPLAY_NAME.equals(column)) {
                 String token = resolveToken(uri);
-                row.add(token == null ? "drag-share.jpg" : ShareUriToken.fileName(token));
+                String suffix = resolveSuffix(uri);
+                row.add(token == null || suffix == null
+                        ? "drag-share.png"
+                        : ShareUriToken.fileName(token, suffix));
             } else if (OpenableColumns.SIZE.equals(column)) {
                 row.add(file.length());
             } else if (MediaStore.MediaColumns.MIME_TYPE.equals(column)) {
-                row.add("image/jpeg");
+                row.add(mimeTypeForSuffix(resolveSuffix(uri)));
             } else if (MediaStore.MediaColumns.DATE_MODIFIED.equals(column)) {
                 row.add(file.lastModified() / 1000L);
             } else if (MediaStore.MediaColumns.TITLE.equals(column)) {
@@ -226,13 +280,27 @@ public final class ShareImageProvider extends ContentProvider {
 
     private File resolveFile(Uri uri) {
         String token = resolveToken(uri);
-        if (token == null) {
+        String suffix = resolveSuffix(uri);
+        if (token == null || suffix == null) {
             throw new IllegalArgumentException("Invalid share URI");
         }
-        return fileForToken(token);
+        return fileForToken(token, suffix);
     }
 
     private String resolveToken(Uri uri) {
+        String pathSegment = resolvePathSegment(uri);
+        return pathSegment == null ? null : ShareUriToken.parse(pathSegment);
+    }
+
+    private String resolveSuffix(Uri uri) {
+        String pathSegment = resolvePathSegment(uri);
+        return pathSegment == null ? null : ShareUriToken.suffix(pathSegment);
+    }
+
+    private String resolvePathSegment(Uri uri) {
+        if (uri == null) {
+            return null;
+        }
         if (!ImageStagingClient.AUTHORITY.equals(uri.getAuthority())) {
             return null;
         }
@@ -240,11 +308,11 @@ public final class ShareImageProvider extends ContentProvider {
                 || !"shared".equals(uri.getPathSegments().get(0))) {
             return null;
         }
-        return ShareUriToken.parse(uri.getPathSegments().get(1));
+        return uri.getPathSegments().get(1);
     }
 
-    private File fileForToken(String token) {
-        return new File(shareDirectory, token + ".jpg");
+    private File fileForToken(String token, String suffix) {
+        return new File(shareDirectory, ShareUriToken.fileName(token, suffix));
     }
 
     private void cleanupExpiredFiles() {
@@ -257,18 +325,23 @@ public final class ShareImageProvider extends ContentProvider {
             if (file.lastModified() < cutoff) {
                 String token = ShareUriToken.parse(file.getName());
                 if (token != null) {
-                    revokeReadAccessAsOwner(null, uriForToken(token));
+                    String suffix = ShareUriToken.suffix(file.getName());
+                    revokeReadAccessAsOwner(null, uriForToken(token, suffix));
                 }
                 file.delete();
             }
         }
     }
 
-    private Uri uriForToken(String token) {
+    private Uri uriForToken(String token, String suffix) {
         return ImageStagingClient.BASE_URI.buildUpon()
                 .appendPath("shared")
-                .appendPath(ShareUriToken.fileName(token))
+                .appendPath(ShareUriToken.fileName(token, suffix))
                 .build();
+    }
+
+    private static String mimeTypeForSuffix(String suffix) {
+        return ShareUriToken.JPEG_SUFFIX.equals(suffix) ? MIME_JPEG : MIME_PNG;
     }
 
     private void grantReadAccessAsOwner(String packageName, Uri uri) {
