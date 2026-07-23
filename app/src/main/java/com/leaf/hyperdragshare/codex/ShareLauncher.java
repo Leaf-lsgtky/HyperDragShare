@@ -20,6 +20,11 @@ final class ShareLauncher {
             intent.addCategory(Intent.CATEGORY_DEFAULT);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
+            DragShareLog.i("DragShare/Share", "prepare target="
+                    + target.component.flattenToShortString()
+                    + " kind=" + (payload.isImage() ? "image" : "text")
+                    + " mime=" + payload.mimeType());
+
             if (!payload.isImage()) {
                 intent.putExtra(Intent.EXTRA_TEXT, payload.text);
             } else {
@@ -36,8 +41,14 @@ final class ShareLauncher {
                         context,
                         stagedImage,
                         target.component.getPackageName());
+                DragShareLog.i("DragShare/Share", "intent image data="
+                        + describeUri(stagedImage)
+                        + " flags=0x" + Integer.toHexString(intent.getFlags())
+                        + " clip=true stream=true grant=true");
             }
             context.startActivity(intent);
+            DragShareLog.i("DragShare/Share", "startActivity succeeded target="
+                    + target.component.flattenToShortString());
         } catch (Throwable error) {
             DragShareLog.w("DragShare/Share", "launch failed target="
                     + target.component.flattenToShortString(), error);
@@ -55,5 +66,14 @@ final class ShareLauncher {
                 toast.show("无法打开 " + target.label);
             }
         }
+    }
+
+    private static String describeUri(Uri uri) {
+        if (uri == null) {
+            return "null";
+        }
+        return uri.getScheme() + "://" + uri.getAuthority()
+                + "/" + (uri.getPathSegments().isEmpty()
+                ? "" : uri.getPathSegments().get(0)) + "/<redacted>";
     }
 }

@@ -148,17 +148,27 @@ public final class ShareImageProvider extends ContentProvider {
         if (!"r".equals(mode)) {
             throw new FileNotFoundException("Read-only provider");
         }
-        File file = resolveFile(uri);
-        if (!file.isFile()) {
-            throw new FileNotFoundException(uri.toString());
+        try {
+            File file = resolveFile(uri);
+            if (!file.isFile()) {
+                throw new FileNotFoundException("Staged image is missing");
+            }
+            DragShareLog.i(TAG, "open uid=" + Binder.getCallingUid()
+                    + " bytes=" + file.length());
+            return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+        } catch (FileNotFoundException | RuntimeException error) {
+            DragShareLog.w(TAG, "open failed uid=" + Binder.getCallingUid()
+                    + " uri=" + describeUri(uri), error);
+            throw error;
         }
-        DragShareLog.i(TAG, "open uid=" + Binder.getCallingUid() + " bytes=" + file.length());
-        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
     }
 
     @Override
     public String getType(Uri uri) {
         String suffix = resolveSuffix(uri);
+        DragShareLog.d(TAG, "getType uid=" + Binder.getCallingUid()
+                + " uri=" + describeUri(uri) + " result="
+                + (suffix == null ? null : mimeTypeForSuffix(suffix)));
         return suffix == null ? null : mimeTypeForSuffix(suffix);
     }
 
@@ -169,7 +179,16 @@ public final class ShareImageProvider extends ContentProvider {
             String selection,
             String[] selectionArgs,
             String sortOrder) {
-        File file = resolveFile(uri);
+        File file;
+        try {
+            file = resolveFile(uri);
+        } catch (RuntimeException error) {
+            DragShareLog.w(TAG, "query failed uid=" + Binder.getCallingUid()
+                    + " uri=" + describeUri(uri), error);
+            throw error;
+        }
+        DragShareLog.d(TAG, "query uid=" + Binder.getCallingUid()
+                + " uri=" + describeUri(uri) + " bytes=" + file.length());
         String[] columns = projection == null
                 ? new String[]{
                         OpenableColumns.DISPLAY_NAME,
@@ -309,6 +328,15 @@ public final class ShareImageProvider extends ContentProvider {
             return null;
         }
         return uri.getPathSegments().get(1);
+    }
+
+    private static String describeUri(Uri uri) {
+        if (uri == null) {
+            return "null";
+        }
+        return uri.getScheme() + "://" + uri.getAuthority()
+                + "/" + (uri.getPathSegments().isEmpty()
+                ? "" : uri.getPathSegments().get(0)) + "/<redacted>";
     }
 
     private File fileForToken(String token, String suffix) {

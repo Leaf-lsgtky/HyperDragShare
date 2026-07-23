@@ -1,6 +1,6 @@
 # HyperDragShare 完整实现说明
 
-本文记录 HyperDragShare `1.7.47`（`versionCode 71`）的当前完整实现、关键兼容性选择和已验证
+本文记录 HyperDragShare `1.7.48`（`versionCode 72`）的当前完整实现、关键兼容性选择和已验证
 设备参数。实现目标是：传送门识别长按文字或图片后，在手指附近立即显示预览；同一根手指
 无需抬起即可继续拖动；简洁和现代样式可按设置出现在上、下、左、右或近手侧，流光样式在底部显示横向分享菜单，环形样式可从左右边缘展开半圆
 菜单；停留在可滚动热区时自动滚动；松手落在目标上时直接分享。
@@ -633,6 +633,11 @@ stream、ClipData、flag 和显式 grant 看似重复，但 QQ、系统分享代
 
 Provider 还实现了 `getType()` 和 `query()`，为新 URI 返回 PNG MIME、显示文件名和大小，
 满足会在打开文件前先探测元数据的接收端；旧 JPEG URI 仍返回 JPEG 元数据。
+
+分享诊断写入统一的 `DragShareLog` 文件，因此设置页导出的日志包含 `prepare`、脱敏后的
+Intent URI 摘要、授权结果、`startActivity succeeded`，以及 Provider 收到的 `query`、`getType`、
+`open` 或对应失败异常。能力 URI 的 UUID 文件名不会写入日志；`query` 和 `getType` 只在调试等级
+记录，关键的启动、授权和文件打开结果在信息等级也会保留。
 
 ### 9.4 授权兼容与安全边界
 
